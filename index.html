@@ -32,14 +32,18 @@
             if (user) { loadPortfolioData(user.uid); } else { initAuth(); }
         });
 
+        // 🚨 핵심 수정: 입력 즉시 화면부터 갱신하고 서버 저장은 백그라운드 처리
         window.triggerSave = async () => {
+            // 1. 화면 즉각 업데이트 (서버 상태 무관)
+            if(window.calculatePortfolio) window.calculatePortfolio();
+            
+            // 2. 백그라운드 클라우드 동기화
             const user = auth.currentUser;
-            if (!user) return;
+            if (!user) return; 
             const shares = document.getElementById('shares').value;
             const avgPrice = document.getElementById('avgPrice').value;
             const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'portfolio', 'main');
             await setDoc(docRef, { shares, avgPrice, updatedAt: new Date().toISOString() });
-            calculatePortfolio();
         };
 
         async function loadPortfolioData(userId) {
@@ -49,14 +53,21 @@
                 const data = snap.data();
                 document.getElementById('shares').value = data.shares || "";
                 document.getElementById('avgPrice').value = data.avgPrice || "";
-                calculatePortfolio();
+                if(window.calculatePortfolio) window.calculatePortfolio();
             }
         }
     </script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;800&display=swap');
         body { font-family: 'Pretendard', sans-serif; background-color: #f8fafc; color: #0f172a; }
-        .premium-card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(20px); border: 1px solid rgba(226, 232, 240, 0.8); transition: all 0.4s; cursor: pointer; position: relative; }
+        
+        /* 한국 주식 색상 세팅 (상승:빨강 / 하락:파랑) */
+        .text-stock-up { color: #ef4444; }
+        .text-stock-down { color: #3b82f6; }
+        .bg-stock-up { background-color: #ef4444; }
+        .bg-stock-down { background-color: #3b82f6; }
+
+        .premium-card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(20px); border-radius: 40px; border: 1px solid rgba(226, 232, 240, 0.8); transition: all 0.4s; cursor: pointer; position: relative; }
         .premium-card:hover { transform: translateY(-8px); box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.15); border-color: #6366f1; }
         .bg-premium { background: linear-gradient(135deg, #020617 0%, #1e1b4b 100%); }
         .price-range-bar { height: 6px; background-color: #f1f5f9; border-radius: 3px; position: relative; margin: 28px 0 16px 0; }
@@ -81,9 +92,33 @@
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
         ::-webkit-scrollbar { height: 6px; width: 6px; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+
+        /* AI Chatbot Styles */
+        #ai-chat-widget { display: none; flex-direction: column; position: fixed; bottom: 90px; right: 20px; width: 340px; height: 500px; background: rgba(255,255,255,0.95); backdrop-filter: blur(20px); border-radius: 30px; box-shadow: 0 20px 40px -10px rgba(0,0,0,0.2); border: 1px solid rgba(226,232,240,0.8); z-index: 999; overflow: hidden; }
+        .chat-msg { padding: 12px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; max-width: 85%; line-height: 1.4; word-break: break-word; }
+        .msg-user { background: #4f46e5; color: white; align-self: flex-end; border-bottom-right-radius: 4px; }
+        .msg-ai { background: #f1f5f9; color: #0f172a; align-self: flex-start; border-bottom-left-radius: 4px; }
     </style>
 </head>
-<body class="antialiased overflow-x-hidden">
+<body class="antialiased overflow-x-hidden relative">
+
+    <!-- ✨ AI Chatbot Floating Button & Panel -->
+    <button onclick="toggleChat()" class="fixed bottom-6 right-6 bg-indigo-600 text-white px-5 py-4 rounded-full shadow-2xl z-50 hover:bg-indigo-500 transition-all font-black text-sm flex items-center gap-2">
+        <span class="ai-pulse">✨</span> AI 비서
+    </button>
+    <div id="ai-chat-widget">
+        <div class="bg-indigo-600 p-4 text-white font-black flex justify-between items-center">
+            <div class="flex items-center gap-2"><span>✨</span> SUPREME AI ADVISOR</div>
+            <button onclick="toggleChat()" class="text-white opacity-80 hover:opacity-100">✕</button>
+        </div>
+        <div id="chat-messages" class="flex-1 p-4 overflow-y-auto flex flex-col gap-3">
+            <div class="chat-msg msg-ai">안녕하십니까! 현재 고객님의 평단가와 보유 수량을 바탕으로 현대ADM 실시간 투자 전략을 상담해 드립니다. 무엇이든 물어보세요!</div>
+        </div>
+        <div class="p-3 border-t border-slate-100 bg-white flex gap-2">
+            <input type="text" id="chat-input" placeholder="예: 지금 매도할까?" class="flex-1 bg-slate-50 px-4 py-2 rounded-full outline-none text-sm font-bold placeholder-slate-400" onkeypress="if(event.key === 'Enter') sendChatMessage()">
+            <button onclick="sendChatMessage()" class="bg-indigo-600 text-white px-4 py-2 rounded-full font-black text-xs hover:bg-indigo-500 transition-all">전송</button>
+        </div>
+    </div>
 
     <!-- Chart Zoom Modal -->
     <div id="zoom-modal" onclick="closeZoom()">
@@ -142,10 +177,10 @@
                         <div class="space-y-6 md:space-y-10">
                             <h3 class="text-indigo-300 text-[10px] md:text-[11px] uppercase tracking-[0.4em]">TARGET PRICE MATRIX</h3>
                             <div class="grid grid-cols-2 gap-3 md:gap-6">
-                                <div class="bg-white/5 p-5 md:p-7 rounded-[24px] md:rounded-[40px] border border-white/10 shadow-lg"><div class="text-[9px] md:text-[10px] text-red-400 mb-2 uppercase">Short-term Target</div><div class="text-2xl md:text-4xl text-white tracking-tighter" id="target-short">22,100원</div></div>
+                                <div class="bg-white/5 p-5 md:p-7 rounded-[24px] md:rounded-[40px] border border-white/10 shadow-lg"><div class="text-[9px] md:text-[10px] text-stock-up mb-2 uppercase">Short-term Target</div><div class="text-2xl md:text-4xl text-white tracking-tighter" id="target-short">22,100원</div></div>
                                 <div class="bg-white/5 p-5 md:p-7 rounded-[24px] md:rounded-[40px] border border-white/10 shadow-lg"><div class="text-[9px] md:text-[10px] text-orange-400 mb-2 uppercase">Mid-term Target</div><div class="text-2xl md:text-4xl text-white tracking-tighter" id="target-mid">28,500원</div></div>
                                 <div class="bg-white/5 p-5 md:p-7 rounded-[24px] md:rounded-[40px] border border-white/10 shadow-lg"><div class="text-[9px] md:text-[10px] text-indigo-400 mb-2 uppercase">Long-term Value</div><div class="text-2xl md:text-4xl text-white tracking-tighter" id="target-long">38,000원</div></div>
-                                <div class="bg-white/5 p-5 md:p-7 rounded-[24px] md:rounded-[40px] border border-red-500/20 shadow-lg"><div class="text-[9px] md:text-[10px] text-slate-400 mb-2 uppercase tracking-tighter">Stop Loss</div><div class="text-2xl md:text-4xl text-slate-300 tracking-tighter" id="support-price">16,500원</div></div>
+                                <div class="bg-white/5 p-5 md:p-7 rounded-[24px] md:rounded-[40px] border border-stock-up shadow-lg"><div class="text-[9px] md:text-[10px] text-slate-400 mb-2 uppercase tracking-tighter">Stop Loss</div><div class="text-2xl md:text-4xl text-slate-300 tracking-tighter" id="support-price">16,500원</div></div>
                             </div>
                         </div>
                         <div class="space-y-6 md:space-y-10">
@@ -161,14 +196,14 @@
             </div>
         </section>
 
-        <!-- 1 & 2. Asset & Supply Flow -->
+        <!-- 1. 자산 현황 & 2. 수급 데이터 센터 -->
         <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 md:gap-10 mb-8 md:mb-12 font-black italic">
             <section class="lg:col-span-1">
                 <h2 class="text-xl md:text-2xl font-black mb-4 md:mb-6 uppercase tracking-tighter"><span class="w-1.5 h-6 md:h-8 bg-indigo-600 rounded-full shadow-lg mr-2 inline-block align-middle"></span> 1. 자산 현황</h2>
                 <div class="premium-card p-6 md:p-8 rounded-[30px] md:rounded-[40px] bg-white space-y-6 md:space-y-8 shadow-xl border border-slate-100 relative cursor-default">
                     <div class="grid grid-cols-2 gap-3 md:gap-5">
-                        <div><label class="text-[10px] md:text-[11px] text-slate-400 uppercase mb-2 block tracking-widest">Shares</label><input type="number" id="shares" oninput="triggerSave()" placeholder="0" class="w-full bg-slate-50 px-4 py-3 md:px-5 md:py-4 rounded-xl md:rounded-2xl outline-none transition-all tracking-tighter"></div>
-                        <div><label class="text-[10px] md:text-[11px] text-slate-400 uppercase mb-2 block tracking-widest">Avg Price</label><input type="number" id="avgPrice" oninput="triggerSave()" placeholder="0" class="w-full bg-slate-50 px-4 py-3 md:px-5 md:py-4 rounded-xl md:rounded-2xl outline-none transition-all tracking-tighter"></div>
+                        <div><label class="text-[10px] md:text-[11px] text-slate-400 uppercase mb-2 block tracking-widest">보유 주수</label><input type="number" id="shares" oninput="window.calculatePortfolio(); triggerSave();" placeholder="0" class="w-full bg-slate-50 px-4 py-3 md:px-5 md:py-4 rounded-xl md:rounded-2xl outline-none transition-all tracking-tighter font-black"></div>
+                        <div><label class="text-[10px] md:text-[11px] text-slate-400 uppercase mb-2 block tracking-widest">평균 단가</label><input type="number" id="avgPrice" oninput="window.calculatePortfolio(); triggerSave();" placeholder="0" class="w-full bg-slate-50 px-4 py-3 md:px-5 md:py-4 rounded-xl md:rounded-2xl outline-none transition-all tracking-tighter font-black"></div>
                     </div>
                     <div class="pt-5 md:pt-6 border-t border-slate-100 space-y-3 md:space-y-4">
                         <div class="flex justify-between items-center text-[10px] md:text-xs uppercase"><span class="text-slate-500">평가 금액</span><span id="totalValueDisplay" class="text-xl md:text-2xl text-slate-950 tracking-tighter">0 원</span></div>
@@ -191,18 +226,18 @@
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
                     <div class="premium-card p-6 md:p-8 rounded-[30px] md:rounded-[40px] bg-white shadow-2xl border border-slate-100" onclick="zoomChart('investorChart', 'Investor Flow Analysis')">
-                        <h3 class="text-[10px] md:text-[11px] text-slate-400 uppercase mb-3 md:mb-4 tracking-widest">Daily Net Transaction (Scroll)</h3>
+                        <h3 class="text-[10px] md:text-[11px] text-slate-400 uppercase mb-3 md:mb-4 tracking-widest">일별 수급 동향 (가로 스크롤)</h3>
                         <div class="chart-scroll-wrapper"><div id="wrapper-investorChart" class="chart-scroll-inner"><canvas id="investorChart"></canvas></div></div>
                     </div>
                     <div class="premium-card p-6 md:p-8 rounded-[30px] md:rounded-[40px] bg-white shadow-2xl border border-slate-100" onclick="zoomChart('cumulativeChart', 'Cumulative Force')">
-                        <h3 class="text-[10px] md:text-[11px] text-slate-400 uppercase mb-3 md:mb-4 tracking-widest">Cumulative Force (Scroll)</h3>
+                        <h3 class="text-[10px] md:text-[11px] text-slate-400 uppercase mb-3 md:mb-4 tracking-widest">누적 세력 강도 (가로 스크롤)</h3>
                         <div class="chart-scroll-wrapper"><div id="wrapper-cumulativeChart" class="chart-scroll-inner"><canvas id="cumulativeChart"></canvas></div></div>
                     </div>
                 </div>
             </section>
         </div>
 
-        <!-- 3. 실시간 종합 시세 및 투자 정보 (PHOTO 1:1 REPLICATION - RESPONSIVE) -->
+        <!-- 3. 실시간 종합 시세 및 투자 정보 -->
         <section class="mb-8 md:mb-12 font-black italic">
             <h2 class="text-xl md:text-2xl font-black mb-4 md:mb-6 uppercase tracking-tighter"><span class="w-1.5 h-6 md:h-8 bg-slate-800 rounded-full shadow-lg mr-2 inline-block align-middle"></span> 3. 실시간 종합 시세 및 투자 정보</h2>
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-10">
@@ -224,13 +259,13 @@
                             <span class="text-slate-500">전일</span><span class="font-bold text-slate-900">18,670</span>
                         </div>
                         <div class="flex justify-between border-b border-slate-100 pb-2 md:pb-3 text-xs md:text-[14px]">
-                            <span class="text-slate-500">시가</span><span class="font-bold text-red-500">18,990</span>
+                            <span class="text-slate-500">시가</span><span class="font-bold text-stock-up">18,990</span>
                         </div>
                         <div class="flex justify-between border-b border-slate-100 pb-2 md:pb-3 text-xs md:text-[14px]">
-                            <span class="text-slate-500">고가</span><span class="font-bold text-red-500">20,150</span>
+                            <span class="text-slate-500">고가</span><span class="font-bold text-stock-up">20,150</span>
                         </div>
                         <div class="flex justify-between border-b border-slate-100 pb-2 md:pb-3 text-xs md:text-[14px]">
-                            <span class="text-slate-500">저가</span><span class="font-bold text-blue-600">15,560</span>
+                            <span class="text-slate-500">저가</span><span class="font-bold text-stock-down">15,560</span>
                         </div>
                         <div class="flex justify-between border-b border-slate-100 pb-2 md:pb-3 col-span-2 text-xs md:text-[14px]">
                             <span class="text-slate-500">거래량</span><span class="font-bold text-slate-900">33,069,036</span>
@@ -254,10 +289,10 @@
                             <span class="text-slate-500">외인소진율</span><span class="font-bold text-slate-900">1.2%</span>
                         </div>
                         <div class="flex justify-between border-b border-slate-100 pb-2 md:pb-3">
-                            <span class="text-slate-500">PER</span><span class="font-bold text-slate-900">-64.16배</span>
+                            <span class="text-slate-500">PER</span><span class="font-bold text-stock-down">-64.16배</span>
                         </div>
                         <div class="flex justify-between border-b border-slate-100 pb-2 md:pb-3">
-                            <span class="text-slate-500">EPS</span><span class="font-bold text-slate-900">-291원</span>
+                            <span class="text-slate-500">EPS</span><span class="font-bold text-stock-down">-291원</span>
                         </div>
                         <div class="flex justify-between border-b border-slate-100 pb-2 md:pb-3">
                             <span class="text-slate-500">추정PER</span><span class="font-bold text-slate-900">N/A</span>
@@ -266,7 +301,7 @@
                             <span class="text-slate-500">추정EPS</span><span class="font-bold text-slate-900">N/A</span>
                         </div>
                         <div class="flex justify-between border-b border-slate-100 pb-2 md:pb-3">
-                            <span class="text-slate-500">PBR</span><span class="font-bold text-slate-900">87.05배</span>
+                            <span class="text-slate-500">PBR</span><span class="font-bold text-stock-up">87.05배</span>
                         </div>
                         <div class="flex justify-between border-b border-slate-100 pb-2 md:pb-3">
                             <span class="text-slate-500">BPS</span><span class="font-bold text-slate-900">214원</span>
@@ -304,7 +339,7 @@
                             <h4 class="text-indigo-300 text-[10px] md:text-xs font-black uppercase tracking-widest">머니플로우 상태 정의</h4>
                             <div class="space-y-2.5 md:space-y-3">
                                 <p class="text-[10px] md:text-[11px] text-white font-bold leading-tight"><span class="text-indigo-400">● 동조화 (Sync):</span> 시장 지수(XBI)와 주가가 함께 움직이며 안정적인 섹터 흐름을 탑니다.</p>
-                                <p class="text-[10px] md:text-[11px] text-white font-bold leading-tight"><span class="text-emerald-400">● 개별 강세 (Outperform):</span> 지수 하락 시에도 주가만 오르는 상태로, 세력이 개입한 신호입니다.</p>
+                                <p class="text-[10px] md:text-[11px] text-white font-bold leading-tight"><span class="text-emerald-400">● 개별 강세 (Outperform):</span> 지수 하락 시에도 주가만 오르는 상태로, 강력한 세력 개입 신호입니다.</p>
                                 <p class="text-[10px] md:text-[11px] text-white font-bold leading-tight"><span class="text-red-400">● 괴리 발생 (Divergence):</span> 지수 상승을 따라가지 못하는 상태로, 저평가 매수 기회입니다.</p>
                             </div>
                         </div>
@@ -350,7 +385,7 @@
                                 <p>ROI란 <strong>Return on Investment</strong>의 약자로, 투입 자본 대비 이익 지표입니다.</p>
                                 <ul class="space-y-2.5 md:space-y-3">
                                     <li><strong>✅ 계산:</strong> (가치 / 비용) × 100</li>
-                                    <li><strong>✅ 출처:</strong> DART 분기보고서 기반 실적/파이프라인 평가</li>
+                                    <li><strong>✅ 출처:</strong> DART 사업보고서 기반 실적/파이프라인 평가</li>
                                     <li><strong>✅ 전략:</strong> 타 기업(SK바이오 등) 대비 압도적인 ROI는 효율적인 CRO 중심 신약 개발 모델이 작동 중임을 증명합니다.</li>
                                 </ul>
                             </div>
@@ -401,7 +436,7 @@
             </div>
         </section>
 
-        <!-- 8. 공매도 현황 (구 9번) -->
+        <!-- 8. 공매도 현황 -->
         <section class="mb-8 md:mb-12 font-black italic">
             <h2 class="text-xl md:text-2xl font-black mb-4 md:mb-6 uppercase tracking-tighter"><span class="w-1.5 h-6 md:h-8 bg-red-600 rounded-full shadow-lg mr-2 inline-block align-middle"></span> 8. 공매도 현황 및 실전 대응 전략</h2>
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-10">
@@ -433,13 +468,14 @@
 
         <!-- 9 & 10. 지분 및 창구 -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-10 mb-8 md:mb-12 font-black italic">
+            <!-- 9. 지분 분석 -->
             <section>
                 <h2 class="text-xl md:text-2xl font-black mb-4 md:mb-6 uppercase tracking-tighter"><span class="w-1.5 h-6 md:h-8 bg-orange-500 rounded-full shadow-lg mr-2 inline-block align-middle"></span> 9. 지분 및 유통 분석</h2>
                 <div class="premium-card p-6 md:p-10 rounded-[30px] md:rounded-[50px] bg-white shadow-2xl flex flex-col h-full">
                     <div class="chart-container mb-4 md:mb-6" style="height: 200px;" onclick="zoomChart('floatPieChart', 'Float Analysis')"><canvas id="floatPieChart"></canvas></div>
                     <div class="pt-4 md:pt-6 border-t border-slate-100 space-y-3 md:space-y-4 text-xs md:text-sm mt-auto">
                         <div class="flex justify-between items-center pb-2 border-b border-slate-50"><span class="text-slate-500 uppercase tracking-widest">대주주 (32.4%)</span><span class="text-indigo-900">약 6,966,000 주</span></div>
-                        <div class="flex justify-between items-center pb-2 border-b border-slate-50"><span class="text-red-500 uppercase tracking-widest">유통물량 (58.2%)</span><span class="text-red-600">약 12,513,000 주</span></div>
+                        <div class="flex justify-between items-center pb-2 border-b border-slate-50"><span class="text-stock-up uppercase tracking-widest">유통물량 (58.2%)</span><span class="text-stock-up font-black">약 12,513,000 주</span></div>
                         <div class="flex justify-between items-center pb-2"><span class="text-slate-500 uppercase tracking-widest">기타 (9.4%)</span><span class="text-slate-700">약 2,021,000 주</span></div>
                     </div>
                     <div class="mt-4 md:mt-6 p-4 md:p-5 bg-orange-50 rounded-2xl md:rounded-3xl border border-orange-100">
@@ -450,6 +486,7 @@
                 </div>
             </section>
             
+            <!-- 10. 창구 분석 -->
             <section>
                 <h2 class="text-xl md:text-2xl font-black mb-4 md:mb-6 uppercase tracking-tighter"><span class="w-1.5 h-6 md:h-8 bg-blue-600 rounded-full shadow-lg mr-2 inline-block align-middle"></span> 10. 주요 거래 창구</h2>
                 <div class="premium-card p-6 md:p-10 rounded-[30px] md:rounded-[50px] bg-white shadow-2xl flex flex-col h-full">
@@ -484,12 +521,13 @@
     </div>
 
     <script>
-        const apiKey = "";
+        const apiKey = ""; 
         let currentPrice = 18670;
         let currentSupplyPeriod = '1M';
         let charts = {};
         const formatNumber = (num) => num?.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") || "0";
 
+        // Calendar Fix (Reverse Scan)
         function generateHistoricalData(days) {
             const data = []; const today = new Date();
             for (let i = days; i >= 0; i--) {
@@ -506,8 +544,8 @@
         let fullData = generateHistoricalData(365);
 
         async function fetchPremiumData(retryCount = 0) {
-            const query = "현대ADM(187660) 주식 분석 데이터";
-            const systemPrompt = "Expert Analyst. Output STRICT JSON with keys: currentPrice, change, changePercent, marketIndices, exchangeRate, brokerageTop5, expertCommentary, news, moneyFlowAnalysis: { status, commentary: string[] }, momentumAnalysis: { score: number[], commentary: string[] }.";
+            const query = "현대ADM(187660) 실시간 주가, 시장 지표, 나스닥 바이오(XBI) 동조성 판독 및 글로벌 모멘텀 전략 코멘트";
+            const systemPrompt = "Expert Investment Analyst. Output STRICT JSON with keys: currentPrice, change, changePercent, marketIndices, exchangeRate, brokerageTop5, expertCommentary, news, moneyFlowAnalysis: { status, commentary: string[] }, momentumAnalysis: { score: number[], commentary: string[] }.";
             
             try {
                 const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
@@ -528,20 +566,21 @@
                     throw new Error("ParseException");
                 }
             } catch (e) {
-                if (retryCount < 3) {
-                    setTimeout(() => fetchPremiumData(retryCount + 1), 1000 * Math.pow(2, retryCount));
+                if (retryCount < 5) {
+                    const wait = Math.pow(2, retryCount) * 1000;
+                    setTimeout(() => fetchPremiumData(retryCount + 1), wait);
                 } else {
                     const mockData = {
                         currentPrice: 18670, change: 320, changePercent: "+1.74%",
                         marketIndices: { kospi: { val: "2,580.44", percent: "+0.54%", pos: true }, kosdaq: { val: "840.12", percent: "+0.82%", pos: true }, nasdaq: { val: "16,240.50", percent: "+1.12%", pos: true } },
                         exchangeRate: { val: "1,345.20", percent: "-0.15%", pos: false },
-                        expertCommentary: { action: "오프라인 모드", percentage: 80, summary: "서버 응답 지연으로 안전 모드로 전환되었습니다." },
+                        expertCommentary: { action: "오프라인 모드", percentage: 80, summary: "서버 응답 지연으로 안전 모드로 전환되었습니다. 내장된 시나리오 데이터를 분석합니다." },
                         news: [{ date: "03/01 SYNC", title: "네트워크 지연 안내", summary: "현재 AI 실시간 연결이 원활하지 않아 오프라인 캐시 데이터를 표시합니다.", sentiment: "neg" }],
                         brokerageTop5: [{ name: "JP모간", volume: 245120 }, { name: "모건스탠리", volume: 112000 }, { name: "키움증권", volume: -54000 }]
                     };
                     updateUI(mockData);
-                    updateMoneyFlowStatus({ status: '분석 대기', commentary: ["API 통신 지연 상태입니다.", "로컬 캐시 엔진 가동 중."] });
-                    updateMomentumStatus({ score: [80, 75, 85, 70, 90], commentary: ["실시간 모멘텀 데이터 지연 중.", "기본 지수 표시."] });
+                    updateMoneyFlowStatus({ status: '분석 대기 (오프라인)', commentary: ["API 통신 지연 상태입니다.", "기존 데이터를 바탕으로 한 보수적 전략을 취하세요.", "로컬 캐시 엔진 가동 중."] });
+                    updateMomentumStatus({ score: [80, 75, 85, 70, 90], commentary: ["실시간 모멘텀 데이터 지연 중.", "기본 벤치마크 지수 표시."] });
                 }
             }
         }
@@ -552,12 +591,12 @@
             if(!badge || !comm) return;
             badge.innerText = analysis.status || "분석 완료";
             badge.className = `status-badge ${analysis.status === '개별 강세' ? 'bg-emerald-500 ai-pulse' : (analysis.status === '괴리 발생' ? 'bg-red-500 ai-pulse' : 'bg-indigo-600')} text-white shadow-lg`;
-            if(analysis.commentary) comm.innerHTML = analysis.commentary.map((c, i) => `<div><p class="text-white text-[11px] md:text-sm mb-1"><strong>${i === 0 ? '🔍 실시간 포인트' : (i === 1 ? '📈 대응 전술' : '🎯 최종 결론')}</strong></p><p class="text-slate-300 text-[10px] md:text-xs">${c}</p></div>`).join('');
+            if(analysis.commentary) comm.innerHTML = analysis.commentary.map((c, i) => `<div><p class="text-white text-sm mb-1"><strong>${i === 0 ? '🔍 실시간 포인트' : (i === 1 ? '📈 대응 전술' : '🎯 최종 결론')}</strong></p><p class="text-slate-300">${c}</p></div>`).join('');
         }
 
         function updateMomentumStatus(analysis) {
             const comm = document.getElementById('momentum-commentary');
-            if(comm && analysis.commentary) comm.innerHTML = analysis.commentary.map((c, i) => `<div><p class="text-white text-[11px] md:text-sm mb-1"><strong>${i === 0 ? '🚀 추진력 분석' : '🛡️ 리스크 관리'}</strong></p><p class="text-indigo-100 text-[10px] md:text-xs">${c}</p></div>`).join('');
+            if(comm && analysis.commentary) comm.innerHTML = analysis.commentary.map((c, i) => `<div><p class="text-white text-sm mb-1"><strong>${i === 0 ? '🚀 추진력 분석' : '🛡️ 리스크 관리'}</strong></p><p class="text-indigo-100">${c}</p></div>`).join('');
             if(analysis.score) renderCharts(null, analysis.score);
         }
 
@@ -566,7 +605,7 @@
             document.getElementById('live-price').innerHTML = `${formatNumber(currentPrice)}<span class="text-lg md:text-2xl font-medium ml-1 md:ml-3 text-slate-400">원</span>`;
             document.getElementById('price-change-row').innerText = `${data.change > 0 ? '▲' : '▼'} ${formatNumber(Math.abs(data.change))} (${data.changePercent})`;
 
-            const uIdx = (id, d) => { if(d){ document.getElementById(`${id}-val`).innerText = d.val; document.getElementById(`${id}-change`).innerText = d.percent; document.getElementById(`${id}-change`).className = `text-[8px] ${d.pos ? 'text-stock-up' : 'text-stock-down'}`; } };
+            const uIdx = (id, d) => { if(d){ document.getElementById(`${id}-val`).innerText = d.val; document.getElementById(`${id}-change`).innerText = d.percent; document.getElementById(`${id}-change`).className = `text-[8px] md:text-[9px] font-black ${d.pos ? 'text-stock-up' : 'text-stock-down'}`; } };
             uIdx('kospi', data.marketIndices?.kospi); uIdx('kosdaq', data.marketIndices?.kosdaq); uIdx('nasdaq', data.marketIndices?.nasdaq);
             if(data.exchangeRate) { document.getElementById('usd-krw-val').innerText = data.exchangeRate.val; document.getElementById('usd-krw-change').innerText = data.exchangeRate.percent; }
 
@@ -582,7 +621,7 @@
             }
             if(data.news) document.getElementById('news-container').innerHTML = data.news.map(n => `<div class="premium-card p-4 md:p-6 bg-white border-b-4 ${n.sentiment === 'pos' ? 'border-emerald-400' : 'border-red-400'} shadow-xl mb-4"><span class="text-[8px] md:text-[9px] text-slate-400 block mb-2">${n.date} SYNC</span><h4 class="text-xs md:text-sm mb-1.5 md:mb-2 uppercase font-bold">${n.title}</h4><p class="text-[10px] md:text-[12px] text-slate-500">${n.summary}</p></div>`).join('');
             if(data.brokerageTop5) document.getElementById('brokerage-list').innerHTML = data.brokerageTop5.map((b,i) => `<div class="flex justify-between items-center p-3 md:p-4 bg-slate-50 rounded-xl md:rounded-2xl border border-slate-100"><span class="text-xs md:text-sm font-bold">${i+1}. ${b.name}</span><span class="${b.volume > 0 ? 'text-stock-up' : 'text-stock-down'} text-xs md:text-sm font-bold">${formatNumber(b.volume)}주</span></div>`).join('');
-            renderCharts(data); calculatePortfolio();
+            renderCharts(data); window.calculatePortfolio(); // UI calculation
         }
 
         function renderCharts(data, momScores = [85, 75, 90, 80, 84]) {
@@ -633,17 +672,98 @@
             });
         }
 
-        function closeZoom() { document.getElementById('zoom-modal').style.display = 'none'; }
-        function changeSupplyPeriod(p) { currentSupplyPeriod = p; document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active')); document.getElementById(`btn-${p}`).classList.add('active'); renderCharts(); }
-        function calculatePortfolio() {
-            const s = parseFloat(document.getElementById('shares').value) || 0; const a = parseFloat(document.getElementById('avgPrice').value) || 0;
+        window.closeZoom = () => { document.getElementById('zoom-modal').style.display = 'none'; };
+        window.changeSupplyPeriod = (p) => { currentSupplyPeriod = p; document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active')); document.getElementById(`btn-${p}`).classList.add('active'); renderCharts(); };
+        
+        // Globally accessible portfolio calculator (CRITICAL FIX FOR MOBILE RESPONSIVENESS)
+        window.calculatePortfolio = () => {
+            const sharesInput = document.getElementById('shares').value;
+            const avgPriceInput = document.getElementById('avgPrice').value;
+            const s = parseFloat(sharesInput) || 0; 
+            const a = parseFloat(avgPriceInput) || 0;
+            
+            const tvDisplay = document.getElementById('totalValueDisplay');
+            const roiDisplay = document.getElementById('roiDisplay');
+
             if (s > 0 && a > 0) {
-                const tv = s * currentPrice; const roi = ((currentPrice / a) - 1) * 100;
-                document.getElementById('totalValueDisplay').innerText = formatNumber(Math.floor(tv)) + " 원"; document.getElementById('roiDisplay').innerText = (roi > 0 ? '+' : '') + roi.toFixed(2) + "%";
-                document.getElementById('roiDisplay').className = `text-3xl md:text-5xl font-black tracking-tighter ${roi > 0 ? 'text-stock-up' : (roi < 0 ? 'text-stock-down' : 'text-slate-400')}`;
+                const tv = s * currentPrice; 
+                const roi = ((currentPrice / a) - 1) * 100;
+                tvDisplay.innerText = formatNumber(Math.floor(tv)) + " 원"; 
+                roiDisplay.innerText = (roi > 0 ? '+' : '') + roi.toFixed(2) + "%";
+                roiDisplay.className = `text-3xl md:text-5xl font-black tracking-tighter ${roi > 0 ? 'text-stock-up' : (roi < 0 ? 'text-stock-down' : 'text-slate-400')}`;
+            } else {
+                tvDisplay.innerText = "0 원";
+                roiDisplay.innerText = "0.00%";
+                roiDisplay.className = `text-3xl md:text-5xl font-black tracking-tighter text-slate-300`;
             }
-        }
+        };
+
         window.onload = () => { fetchPremiumData(); setInterval(fetchPremiumData, 300000); };
+
+        /* AI Chatbot Logic */
+        let chatOpen = false;
+        window.toggleChat = () => {
+            chatOpen = !chatOpen;
+            document.getElementById('ai-chat-widget').style.display = chatOpen ? 'flex' : 'none';
+        };
+
+        window.appendMessage = (sender, text, isLoading = false) => {
+            const container = document.getElementById('chat-messages');
+            const msgDiv = document.createElement('div');
+            const id = 'msg-' + Date.now();
+            msgDiv.id = id;
+            msgDiv.className = `chat-msg ${sender === 'user' ? 'msg-user' : 'msg-ai'} ${isLoading ? 'ai-pulse' : ''}`;
+            msgDiv.innerText = text;
+            container.appendChild(msgDiv);
+            container.scrollTop = container.scrollHeight;
+            return id;
+        };
+
+        window.updateMessage = (id, text) => {
+            const msgDiv = document.getElementById(id);
+            if(msgDiv) {
+                msgDiv.innerText = text;
+                msgDiv.classList.remove('ai-pulse');
+            }
+        };
+
+        window.sendChatMessage = async () => {
+            const input = document.getElementById('chat-input');
+            const text = input.value.trim();
+            if(!text) return;
+
+            window.appendMessage('user', text);
+            input.value = '';
+
+            const shares = document.getElementById('shares').value || 0;
+            const avgPrice = document.getElementById('avgPrice').value || 0;
+            let roi = 0;
+            if (shares > 0 && avgPrice > 0) {
+                roi = (((currentPrice / avgPrice) - 1) * 100).toFixed(2);
+            }
+
+            const context = `[상황 보고] 현대ADM 주가: ${currentPrice}원. 사용자 평단가: ${avgPrice}원, 수량: ${shares}주, 현재 수익률: ${roi}%.`;
+            const prompt = `${context}\n질문: ${text}`;
+            const loadingId = window.appendMessage('ai', '데이터 분석 중...', true);
+
+            try {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }],
+                        systemInstruction: { parts: [{ text: "당신은 현대ADM 주식 투자를 돕는 차가운 이성의 전문 AI 비서입니다. 사용자의 수익률 상황을 인지하고 객관적이고 예리한 투자 조언을 한국어로 3문장 이내로 제공하세요." }] }
+                    })
+                });
+                
+                if (!response.ok) throw new Error("Chat Error");
+                const result = await response.json();
+                let reply = result.candidates[0].content.parts[0].text;
+                window.updateMessage(loadingId, reply);
+            } catch (e) {
+                window.updateMessage(loadingId, "죄송합니다. 서버 접속자가 많아 지연되고 있습니다.");
+            }
+        };
     </script>
 </body>
 </html>
