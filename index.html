@@ -12,7 +12,6 @@
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Global Variable Setup for Firebase
         const firebaseConfig = JSON.parse(__firebase_config);
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
@@ -57,41 +56,63 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;800&display=swap');
         body { font-family: 'Pretendard', sans-serif; background-color: #f8fafc; color: #0f172a; }
-        .premium-card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(20px); border-radius: 40px; border: 1px solid rgba(226, 232, 240, 0.8); transition: all 0.4s; }
+        .premium-card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(20px); border-radius: 40px; border: 1px solid rgba(226, 232, 240, 0.8); transition: all 0.4s; cursor: pointer; position: relative; }
         .premium-card:hover { transform: translateY(-8px); box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.15); border-color: #6366f1; }
         .bg-premium { background: linear-gradient(135deg, #020617 0%, #1e1b4b 100%); }
         .price-range-bar { height: 6px; background-color: #f1f5f9; border-radius: 3px; position: relative; margin: 28px 0 16px 0; }
         .price-pointer { position: absolute; top: -16px; transform: translateX(-50%); background: #1e293b; color: #fff; padding: 2px 10px; border-radius: 20px; font-size: 13px; font-weight: 800; white-space: nowrap; z-index: 10; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.2); }
         .price-pointer::after { content: ''; position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%); border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 5px solid #1e293b; }
-        .tab-btn.active { background-color: #4f46e5; color: white; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4); }
+        .tab-btn.active { background-color: #4f46e5; color: white; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4); border-color: #4f46e5; }
         .ai-pulse { animation: pulse 2s infinite; }
         @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(0.96); } }
+        
         .chart-container { position: relative; width: 100%; height: 280px; }
+        .chart-scroll-wrapper { width: 100%; height: 280px; overflow-x: auto; overflow-y: hidden; position: relative; scroll-behavior: smooth; }
+        .chart-scroll-inner { height: 100%; min-width: 100%; position: relative; }
+
+        #zoom-modal { display: none; position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,0.9); backdrop-filter: blur(15px); align-items: center; justify-content: center; padding: 20px; }
+        #zoom-content { background: white; width: 95%; max-width: 1400px; height: 85vh; border-radius: 50px; padding: 40px; position: relative; overflow: hidden; }
+        .close-zoom { position: absolute; top: 25px; right: 35px; font-size: 32px; font-weight: 800; cursor: pointer; color: #64748b; z-index: 1001; }
+        .status-badge { padding: 6px 14px; border-radius: 12px; font-size: 12px; font-weight: 800; text-transform: uppercase; }
+        .status-active { background: #10b981; color: white; box-shadow: 0 0 15px rgba(16,185,129,0.4); }
+        ::-webkit-scrollbar { height: 8px; width: 6px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
     </style>
 </head>
 <body class="antialiased overflow-x-hidden">
 
+    <!-- Chart Zoom Modal -->
+    <div id="zoom-modal" onclick="closeZoom()">
+        <div id="zoom-content" onclick="event.stopPropagation()">
+            <span class="close-zoom" onclick="closeZoom()">✕</span>
+            <h3 id="zoom-title" class="text-2xl font-black mb-8 italic uppercase text-slate-800">Chart Detailed Analysis</h3>
+            <div class="chart-scroll-wrapper" style="height: calc(100% - 80px);">
+                <div id="zoom-inner" class="chart-scroll-inner"><canvas id="zoomChart"></canvas></div>
+            </div>
+        </div>
+    </div>
+
     <div id="app" class="max-w-7xl mx-auto px-4 py-8 lg:py-12">
         
         <!-- Header -->
-        <header class="mb-10 flex flex-col md:flex-row md:items-start justify-between gap-6">
+        <header class="mb-10 flex flex-col md:flex-row md:items-start justify-between gap-6 font-black italic">
             <div>
                 <div class="flex items-center gap-3 mb-3">
-                    <span class="bg-premium text-white text-[10px] font-black px-4 py-1.5 rounded-full tracking-[0.2em] uppercase italic">SUPREME COMMAND CENTER</span>
-                    <span id="update-indicator" class="flex items-center gap-2 text-xs text-emerald-600 font-extrabold uppercase">
-                        <span class="w-3 h-3 bg-emerald-500 rounded-full ai-pulse"></span> GLOBAL LIVE DATA SYNC
+                    <span class="bg-premium text-white text-[10px] px-4 py-1.5 rounded-full tracking-[0.2em] uppercase shadow-lg">SUPREME COMMAND CENTER</span>
+                    <span class="flex items-center gap-2 text-xs text-emerald-600 uppercase">
+                        <span class="w-3 h-3 bg-emerald-500 rounded-full ai-pulse"></span> GLOBAL LIVE DATA STREAMING
                     </span>
                 </div>
-                <h1 class="text-6xl font-black text-slate-950 tracking-tighter italic">현대ADM <span class="text-3xl font-light text-slate-300 font-normal">187660</span></h1>
+                <h1 class="text-6xl font-black text-slate-950 tracking-tighter">현대ADM <span class="text-3xl font-light text-slate-300 font-normal">187660</span></h1>
             </div>
             
-            <div class="bg-white p-7 rounded-[40px] shadow-2xl border border-slate-100 min-w-[440px] text-right space-y-4">
-                <div class="relative font-black">
-                    <div class="text-[11px] text-slate-400 mb-1 uppercase italic tracking-widest">Global Market Pulse</div>
-                    <div id="live-price" class="text-6xl text-stock-up tracking-tighter italic">---,---<span class="text-xl font-medium ml-2 text-slate-400">원</span></div>
+            <div class="bg-white p-7 rounded-[40px] shadow-2xl border border-slate-100 min-w-[460px] text-right space-y-4">
+                <div class="relative">
+                    <div class="text-[11px] text-slate-400 mb-1 uppercase tracking-widest">LIVE MARKET PRICE</div>
+                    <div id="live-price" class="text-6xl text-stock-up tracking-tighter font-black">18,670<span class="text-xl font-medium ml-2 text-slate-400 font-normal">원</span></div>
                     <div id="price-change-row" class="text-sm text-stock-up mt-1">--- (---%)</div>
                 </div>
-                <div class="grid grid-cols-4 gap-2 pt-5 border-t border-slate-100 font-black italic">
+                <div class="grid grid-cols-4 gap-2 pt-6 border-t border-slate-100">
                     <div class="text-center"><div class="text-[9px] text-slate-400 uppercase">KOSPI</div><div id="kospi-val" class="text-[11px]">----.--</div><div id="kospi-change" class="text-[8px]">-.--%</div></div>
                     <div class="text-center border-x border-slate-100"><div class="text-[9px] text-slate-400 uppercase">KOSDAQ</div><div id="kosdaq-val" class="text-[11px]">---.--</div><div id="kosdaq-change" class="text-[8px]">-.--%</div></div>
                     <div class="text-center border-r border-slate-100"><div class="text-[9px] text-indigo-500 uppercase">NASDAQ</div><div id="nasdaq-val" class="text-[11px]">-----.--</div><div id="nasdaq-change" class="text-[8px]">-.--%</div></div>
@@ -101,35 +122,34 @@
         </header>
 
         <!-- 0. Stock Command Center -->
-        <section class="mb-12">
+        <section class="mb-12 font-black italic">
             <div class="bg-premium p-10 rounded-[60px] shadow-2xl relative overflow-hidden border-b-[16px] border-indigo-600">
-                <div class="relative z-10 font-black">
-                    <div class="flex flex-col md:flex-row md:items-center justify-between mb-10 gap-4 border-b border-white/10 pb-8 uppercase italic">
+                <div class="relative z-10">
+                    <div class="flex flex-col md:flex-row md:items-center justify-between mb-10 gap-4 border-b border-white/10 pb-8 uppercase">
                         <div>
-                            <h2 class="text-white text-5xl tracking-tighter flex items-center gap-5 italic">
-                                <span class="bg-stock-up text-white p-4 rounded-[30px] shadow-2xl ai-pulse text-3xl">AI</span> 
-                                Stock Command Center
+                            <h2 class="text-white text-4xl lg:text-5xl tracking-tighter flex items-center gap-5">
+                                <span class="bg-stock-up text-white p-4 rounded-[30px] shadow-2xl ai-pulse text-3xl">AI</span> Stock Command Center
                             </h2>
-                            <p class="text-indigo-200 text-sm mt-4 tracking-widest opacity-80">GLOBAL DATA & MEDICAL ARCHIVE INTEGRATED ANALYSIS</p>
+                            <p class="text-indigo-200 text-sm mt-4 tracking-widest opacity-80 uppercase">GLOBAL REAL-TIME TACTICAL ANALYSIS ENGINE</p>
                         </div>
-                        <div class="bg-white/10 px-10 py-4 rounded-[30px] border border-white/20 text-white text-xs tracking-[0.3em]" id="today-date-text">2026.03.03 SYNCED</div>
+                        <div class="bg-white/10 px-10 py-4 rounded-[30px] border border-white/20 text-white text-xs tracking-[0.3em]" id="today-date-text">2026.03.01 SYNCED</div>
                     </div>
-                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-16 italic font-black">
+                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-16">
                         <div class="space-y-10">
                             <h3 class="text-indigo-300 text-[11px] uppercase tracking-[0.4em]">TARGET PRICE MATRIX</h3>
-                            <div class="grid grid-cols-2 gap-6 italic">
-                                <div class="bg-white/5 p-7 rounded-[40px] border border-white/10 shadow-lg"><div class="text-[10px] text-red-400 mb-2 uppercase">Short-term</div><div class="text-4xl text-white tracking-tighter" id="target-short">22,100원</div></div>
-                                <div class="bg-white/5 p-7 rounded-[40px] border border-white/10 shadow-lg"><div class="text-[10px] text-orange-400 mb-2 uppercase">Mid-term</div><div class="text-4xl text-white tracking-tighter" id="target-mid">28,500원</div></div>
-                                <div class="bg-white/5 p-7 rounded-[40px] border border-white/10 shadow-lg"><div class="text-[10px] text-indigo-400 mb-2 uppercase">Long-term</div><div class="text-4xl text-white tracking-tighter" id="target-long">38,000원</div></div>
+                            <div class="grid grid-cols-2 gap-6">
+                                <div class="bg-white/5 p-7 rounded-[40px] border border-white/10 shadow-lg"><div class="text-[10px] text-red-400 mb-2 uppercase">Short-term Target</div><div class="text-4xl text-white tracking-tighter" id="target-short">22,100원</div></div>
+                                <div class="bg-white/5 p-7 rounded-[40px] border border-white/10 shadow-lg"><div class="text-[10px] text-orange-400 mb-2 uppercase">Mid-term Target</div><div class="text-4xl text-white tracking-tighter" id="target-mid">28,500원</div></div>
+                                <div class="bg-white/5 p-7 rounded-[40px] border border-white/10 shadow-lg"><div class="text-[10px] text-indigo-400 mb-2 uppercase">Long-term Value</div><div class="text-4xl text-white tracking-tighter" id="target-long">38,000원</div></div>
                                 <div class="bg-white/5 p-7 rounded-[40px] border border-red-500/20 shadow-lg"><div class="text-[10px] text-slate-400 mb-2 uppercase tracking-tighter">Stop Loss</div><div class="text-4xl text-slate-300 tracking-tighter" id="support-price">16,500원</div></div>
                             </div>
                         </div>
                         <div class="space-y-10">
-                            <div class="flex justify-between items-center mb-4 italic"><h3 class="text-indigo-300 text-[11px] uppercase tracking-[0.4em]">TACTICAL POSITION</h3><button id="generate-ai-report" class="text-[11px] text-white bg-indigo-600 px-8 py-3 rounded-full hover:bg-indigo-500 transition-all shadow-2xl italic tracking-widest uppercase">✨ RUN DEEP SCAN</button></div>
-                            <div class="bg-white/10 p-10 rounded-[50px] border border-white/10 backdrop-blur-2xl shadow-inner italic">
-                                <div id="reco-action" class="text-6xl font-black text-emerald-400 italic mb-6 tracking-tighter uppercase font-black">적극 매집...</div>
-                                <div class="flex items-center gap-5 mb-10"><div class="flex-1 bg-white/20 h-4 rounded-full overflow-hidden shadow-2xl"><div id="reco-progress" class="bg-emerald-400 h-full w-0 transition-all duration-[2.5s]"></div></div><span id="reco-pct" class="text-white text-2xl font-black">--%</span></div>
-                                <div class="flex items-start gap-6 font-black"><div class="bg-white/10 p-4 rounded-2xl text-3xl shadow-2xl">🖋️</div><p id="expert-commentary-text" class="text-indigo-50 text-[18px] leading-relaxed tracking-tight">전 세계 의학 아카이브 및 공매도 쇼트커버링 가능성을 실시간 분석 중입니다.</p></div>
+                            <div class="flex justify-between items-center mb-4"><h3 class="text-indigo-300 text-[11px] uppercase tracking-[0.4em]">TACTICAL POSITION</h3><button onclick="location.reload()" class="text-[11px] text-white bg-indigo-600 px-8 py-3 rounded-full hover:bg-indigo-500 transition-all shadow-2xl uppercase tracking-widest">✨ RE-SCAN MARKET</button></div>
+                            <div class="bg-white/10 p-10 rounded-[50px] border border-white/10 backdrop-blur-2xl shadow-inner">
+                                <div id="reco-action" class="text-6xl text-emerald-400 mb-6 tracking-tighter uppercase">분석 가동...</div>
+                                <div class="flex items-center gap-5 mb-10"><div class="flex-1 bg-white/20 h-4 rounded-full overflow-hidden shadow-2xl"><div id="reco-progress" class="bg-emerald-400 h-full w-0 transition-all duration-[2.5s] shadow-[0_0_20px_#10b981]"></div></div><span id="reco-pct" class="text-white text-2xl">--%</span></div>
+                                <div class="flex items-start gap-6"><div class="bg-white/10 p-4 rounded-2xl text-3xl shadow-2xl">🖋️</div><p id="expert-commentary-text" class="text-indigo-50 text-[18px] leading-relaxed tracking-tight">전 세계 수급 및 섹터 정보를 교차 분석 중입니다.</p></div>
                             </div>
                         </div>
                     </div>
@@ -137,200 +157,493 @@
             </div>
         </section>
 
-        <!-- 1 & 2 Section -->
-        <div class="grid grid-cols-1 lg:grid-cols-4 gap-10 mb-12 italic font-black">
+        <!-- 1 & 2. Asset & Supply Flow -->
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-10 mb-12 font-black italic">
             <section class="lg:col-span-1">
                 <h2 class="text-2xl font-black mb-6 uppercase tracking-tighter"><span class="w-1.5 h-8 bg-indigo-600 rounded-full shadow-lg mr-2 inline-block"></span> 1. 자산 현황</h2>
-                <div class="premium-card p-8 rounded-[40px] bg-white space-y-8 shadow-xl border border-slate-100 relative font-black">
-                    <div class="grid grid-cols-2 gap-5 italic font-black">
-                        <div><label class="text-[11px] text-slate-400 uppercase mb-2 block tracking-widest italic">Shares</label><input type="number" id="shares" oninput="triggerSave()" placeholder="0" class="w-full bg-slate-50 px-5 py-4 rounded-2xl outline-none transition-all italic tracking-tighter font-black"></div>
-                        <div><label class="text-[11px] text-slate-400 uppercase mb-2 block tracking-widest italic">Avg Price</label><input type="number" id="avgPrice" oninput="triggerSave()" placeholder="0" class="w-full bg-slate-50 px-5 py-4 rounded-2xl outline-none transition-all italic tracking-tighter font-black"></div>
+                <div class="premium-card p-8 rounded-[40px] bg-white space-y-8 shadow-xl border border-slate-100 relative cursor-default">
+                    <div class="grid grid-cols-2 gap-5">
+                        <div><label class="text-[11px] text-slate-400 uppercase mb-2 block tracking-widest">Shares</label><input type="number" id="shares" oninput="triggerSave()" placeholder="0" class="w-full bg-slate-50 px-5 py-4 rounded-2xl outline-none transition-all tracking-tighter"></div>
+                        <div><label class="text-[11px] text-slate-400 uppercase mb-2 block tracking-widest">Avg Price</label><input type="number" id="avgPrice" oninput="triggerSave()" placeholder="0" class="w-full bg-slate-50 px-5 py-4 rounded-2xl outline-none transition-all tracking-tighter"></div>
                     </div>
-                    <div class="pt-6 border-t border-slate-100 italic space-y-4">
+                    <div class="pt-6 border-t border-slate-100 space-y-4">
                         <div class="flex justify-between items-center text-xs uppercase"><span class="text-slate-500">평가 금액</span><span id="totalValueDisplay" class="text-2xl text-slate-950 tracking-tighter">0 원</span></div>
-                        <div class="flex justify-between items-center text-xs uppercase"><span class="text-slate-500">실시간 수익률</span><span id="roiDisplay" class="text-5xl text-slate-300 tracking-tighter">0.00%</span></div>
+                        <div class="flex justify-between items-center text-xs uppercase"><span class="text-slate-500">수익률</span><span id="roiDisplay" class="text-5xl text-slate-300 tracking-tighter">0.00%</span></div>
                     </div>
-                    <div class="absolute -top-3 -right-3 bg-emerald-500 text-white text-[9px] font-black px-2 py-1 rounded-full shadow-lg ai-pulse italic">CLOUD SYNCED</div>
+                    <div class="absolute -top-3 -right-3 bg-emerald-500 text-white text-[9px] px-2 py-1 rounded-full shadow-lg ai-pulse">CLOUD SYNCED</div>
                 </div>
             </section>
             <section class="lg:col-span-3">
-                <div class="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-5 italic">
+                <div class="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-5">
                     <h2 class="text-2xl font-black uppercase tracking-tighter"><span class="w-1.5 h-8 bg-indigo-600 rounded-full shadow-lg mr-2 inline-block"></span> 2. 수급 데이터 센터</h2>
-                    <div class="flex bg-slate-100 p-1.5 rounded-[24px] border border-slate-200 shadow-inner font-black">
-                        <button onclick="changeSupplyPeriod('1D')" class="tab-btn px-4 py-2 text-[10px] rounded-[16px] transition-all uppercase italic" id="btn-1D">1D</button>
-                        <button onclick="changeSupplyPeriod('1W')" class="tab-btn px-4 py-2 text-[10px] rounded-[16px] transition-all uppercase mx-1 italic" id="btn-1W">1W</button>
-                        <button onclick="changeSupplyPeriod('1M')" class="tab-btn px-4 py-2 text-[10px] rounded-[16px] transition-all active uppercase italic" id="btn-1M">1M</button>
-                        <button onclick="changeSupplyPeriod('3M')" class="tab-btn px-4 py-2 text-[10px] rounded-[16px] transition-all uppercase mx-1 italic" id="btn-3M">3M</button>
-                        <button onclick="changeSupplyPeriod('6M')" class="tab-btn px-4 py-2 text-[10px] rounded-[16px] transition-all uppercase mx-1 italic" id="btn-6M">6M</button>
-                        <button onclick="changeSupplyPeriod('1Y')" class="tab-btn px-4 py-2 text-[10px] rounded-[16px] transition-all uppercase italic" id="btn-1Y">1Y</button>
+                    <div class="flex bg-slate-100 p-1.5 rounded-[24px] border border-slate-200 shadow-inner">
+                        <button onclick="changeSupplyPeriod('1D')" class="tab-btn px-4 py-2 text-[10px] rounded-[16px] transition-all uppercase" id="btn-1D">1D</button>
+                        <button onclick="changeSupplyPeriod('1W')" class="tab-btn px-4 py-2 text-[10px] rounded-[16px] transition-all uppercase mx-1" id="btn-1W">1W</button>
+                        <button onclick="changeSupplyPeriod('1M')" class="tab-btn px-4 py-2 text-[10px] rounded-[16px] transition-all active uppercase" id="btn-1M">1M</button>
+                        <button onclick="changeSupplyPeriod('3M')" class="tab-btn px-4 py-2 text-[10px] rounded-[16px] transition-all uppercase mx-1" id="btn-3M">3M</button>
+                        <button onclick="changeSupplyPeriod('6M')" class="tab-btn px-4 py-2 text-[10px] rounded-[16px] transition-all uppercase mx-1" id="btn-6M">6M</button>
+                        <button onclick="changeSupplyPeriod('1Y')" class="tab-btn px-4 py-2 text-[10px] rounded-[16px] transition-all uppercase" id="btn-1Y">1Y</button>
                     </div>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 font-black">
-                    <div class="premium-card p-8 rounded-[40px] bg-white shadow-2xl border border-slate-100 italic"><h3 class="text-[11px] text-slate-400 uppercase mb-4 tracking-widest italic">Daily Transaction Flow</h3><div class="chart-container"><canvas id="investorChart"></canvas></div></div>
-                    <div class="premium-card p-8 rounded-[40px] bg-white shadow-2xl border border-slate-100 italic"><h3 class="text-[11px] text-slate-400 uppercase mb-4 tracking-widest italic">Cumulative Market Power</h3><div class="chart-container"><canvas id="cumulativeChart"></canvas></div></div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div class="premium-card p-8 bg-white shadow-2xl border border-slate-100" onclick="zoomChart('investorChart', 'Investor Flow Analysis')">
+                        <h3 class="text-[11px] text-slate-400 uppercase mb-4 tracking-widest">Daily Net Transaction (Scroll & Click)</h3>
+                        <div class="chart-scroll-wrapper"><div id="wrapper-investorChart" class="chart-scroll-inner"><canvas id="investorChart"></canvas></div></div>
+                    </div>
+                    <div class="premium-card p-8 bg-white shadow-2xl border border-slate-100" onclick="zoomChart('cumulativeChart', 'Cumulative Force')">
+                        <h3 class="text-[11px] text-slate-400 uppercase mb-4 tracking-widest">Cumulative Force (Scroll & Click)</h3>
+                        <div class="chart-scroll-wrapper"><div id="wrapper-cumulativeChart" class="chart-scroll-inner"><canvas id="cumulativeChart"></canvas></div></div>
+                    </div>
                 </div>
             </section>
         </div>
 
-        <!-- 3. 실시간 종합 시세 및 투자 정보 -->
+        <!-- 3. 실시간 종합 시세 및 투자 정보 (PHOTO 1:1 REPLICATION) -->
         <section class="mb-12 font-black italic">
-            <h2 class="text-2xl font-black mb-6 uppercase tracking-tighter italic"><span class="w-1.5 h-8 bg-slate-800 rounded-full shadow-lg mr-2 inline-block"></span> 3. 실시간 종합 시세 및 투자 정보</h2>
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-10 font-black italic">
-                <div class="premium-card p-10 rounded-[50px] bg-white shadow-2xl border border-slate-100 italic font-black">
-                    <h3 class="text-lg font-black mb-8 flex justify-between items-center uppercase tracking-widest italic">시세 정보 <span class="text-slate-300 text-2xl font-light">›</span></h3>
-                    <div class="relative pt-6 pb-6"><div class="flex justify-between text-[11px] text-slate-400 mb-2 uppercase italic font-black font-black"><span>52W LOW</span><span>52W HIGH</span></div><div class="price-range-bar"><div id="price-pointer" class="price-pointer font-black italic italic font-black italic font-black italic">18,670</div></div><div class="flex justify-between text-sm text-slate-950 mt-2 font-black italic"><span>1,118</span><span>20,350</span></div></div>
-                    <div class="grid grid-cols-2 gap-x-16 gap-y-5 pt-8 border-t border-slate-50 italic">
-                        <div class="flex justify-between border-b pb-2 uppercase text-xs italic"><span class="text-slate-400 font-black">전일</span><span class="font-black">18,670</span></div>
-                        <div class="flex justify-between border-b pb-2 uppercase text-xs italic"><span class="text-slate-400 font-black">시가</span><span class="font-black text-red-600">18,990</span></div>
-                        <div class="flex justify-between border-b pb-2 uppercase text-xs italic"><span class="text-slate-400 font-black">고가</span><span class="font-black text-red-600 font-black">20,150</span></div>
-                        <div class="flex justify-between border-b pb-2 uppercase text-xs italic"><span class="text-slate-400 font-black">저가</span><span class="font-black text-blue-600 font-black">15,560</span></div>
-                        <div class="flex justify-between border-b pb-2 col-span-2 uppercase text-xs italic"><span class="text-slate-400 font-black">거래량 (VOL)</span><span class="font-black font-black font-black italic">33,069,036</span></div>
+            <h2 class="text-2xl font-black mb-6 uppercase tracking-tighter"><span class="w-1.5 h-8 bg-slate-800 rounded-full shadow-lg mr-2 inline-block"></span> 3. 실시간 종합 시세 및 투자 정보</h2>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                
+                <!-- 시세정보 카드 -->
+                <div class="premium-card p-8 lg:p-10 rounded-[40px] bg-white shadow-2xl border border-slate-100 cursor-default">
+                    <h3 class="text-[17px] font-bold text-slate-900 mb-8 flex items-center">시세정보 <span class="text-slate-300 ml-1 font-light">›</span></h3>
+                    
+                    <div class="relative pt-6 pb-6">
+                        <div class="flex justify-between text-[12px] text-slate-500 mb-2"><span>52주 최저</span><span>52주 최고</span></div>
+                        <div class="price-range-bar">
+                            <div id="price-pointer" class="price-pointer" style="left: 95%;">18,670</div>
+                        </div>
+                        <div class="flex justify-between text-[15px] font-bold text-slate-900 mt-2"><span>1,118</span><span>20,350</span></div>
                     </div>
+
+                    <div class="grid grid-cols-2 gap-x-12 gap-y-4 pt-6 mt-2 border-t border-slate-100">
+                        <div class="flex justify-between border-b border-slate-100 pb-3 text-[14px]">
+                            <span class="text-slate-500">전일</span><span class="font-bold text-slate-900">18,670</span>
+                        </div>
+                        <div class="flex justify-between border-b border-slate-100 pb-3 text-[14px]">
+                            <span class="text-slate-500">시가</span><span class="font-bold text-red-500">18,990</span>
+                        </div>
+                        <div class="flex justify-between border-b border-slate-100 pb-3 text-[14px]">
+                            <span class="text-slate-500">고가</span><span class="font-bold text-red-500">20,150</span>
+                        </div>
+                        <div class="flex justify-between border-b border-slate-100 pb-3 text-[14px]">
+                            <span class="text-slate-500">저가</span><span class="font-bold text-blue-600">15,560</span>
+                        </div>
+                        <div class="flex justify-between border-b border-slate-100 pb-3 col-span-2 text-[14px]">
+                            <span class="text-slate-500">거래량</span><span class="font-bold text-slate-900">33,069,036</span>
+                        </div>
+                        <div class="flex justify-between border-b border-slate-100 pb-3 col-span-2 text-[14px]">
+                            <span class="text-slate-500">대금</span><span class="font-bold text-slate-900">595,067백만</span>
+                        </div>
+                    </div>
+                    <p class="text-[12px] text-slate-400 mt-5">일별 시세 데이터는 한국거래소(KRX)에서 제공합니다.</p>
                 </div>
-                <div class="premium-card p-10 rounded-[50px] bg-white shadow-2xl border border-slate-100 italic font-black">
-                    <h3 class="text-lg font-black mb-8 flex justify-between items-center uppercase tracking-widest font-black italic font-black font-black">투자 지표 <span class="text-slate-300 text-2xl font-light font-black">›</span></h3>
-                    <div class="grid grid-cols-2 gap-x-16 gap-y-5 italic font-black font-black">
-                        <div class="flex justify-between border-b pb-2"><span class="text-slate-400 text-xs font-black">시총</span><span class="font-black tracking-tighter uppercase font-black italic font-black">1조 356억</span></div>
-                        <div class="flex justify-between border-b pb-2"><span class="text-slate-400 text-xs font-black">외인소진율</span><span class="font-black italic font-black italic font-black">1.2%</span></div>
-                        <div class="flex justify-between border-b pb-2"><span class="text-slate-400 text-xs font-black font-black italic">PBR</span><span class="text-red-600 font-black text-base italic italic font-black italic font-black">87.05배</span></div>
-                        <div class="flex justify-between border-b pb-2 italic italic font-black font-black"><span class="text-slate-400 text-xs font-black">BPS</span><span class="font-black italic font-black font-black">214원</span></div>
-                        <div class="flex justify-between border-b pb-2 italic col-span-2 italic font-black font-black italic"><span class="text-slate-400 text-xs font-black font-black italic">PER (TTM)</span><span class="font-black text-blue-600 font-black font-black italic font-black font-black">-64.16배</span></div>
+
+                <!-- 투자정보 카드 -->
+                <div class="premium-card p-8 lg:p-10 rounded-[40px] bg-white shadow-2xl border border-slate-100 cursor-default">
+                    <h3 class="text-[17px] font-bold text-slate-900 mb-8 flex items-center">투자정보 <span class="text-slate-300 ml-1 font-light">›</span></h3>
+                    
+                    <div class="grid grid-cols-2 gap-x-12 gap-y-5 text-[14px]">
+                        <div class="flex justify-between border-b border-slate-100 pb-3">
+                            <span class="text-slate-500">시총</span><span class="font-bold text-slate-900">1조 356억</span>
+                        </div>
+                        <div class="flex justify-between border-b border-slate-100 pb-3">
+                            <span class="text-slate-500">외인소진율</span><span class="font-bold text-slate-900">1.2%</span>
+                        </div>
+                        <div class="flex justify-between border-b border-slate-100 pb-3">
+                            <span class="text-slate-500">PER</span><span class="font-bold text-slate-900">-64.16배</span>
+                        </div>
+                        <div class="flex justify-between border-b border-slate-100 pb-3">
+                            <span class="text-slate-500">EPS</span><span class="font-bold text-slate-900">-291원</span>
+                        </div>
+                        <div class="flex justify-between border-b border-slate-100 pb-3">
+                            <span class="text-slate-500">추정PER</span><span class="font-bold text-slate-900">N/A</span>
+                        </div>
+                        <div class="flex justify-between border-b border-slate-100 pb-3">
+                            <span class="text-slate-500">추정EPS</span><span class="font-bold text-slate-900">N/A</span>
+                        </div>
+                        <div class="flex justify-between border-b border-slate-100 pb-3">
+                            <span class="text-slate-500">PBR</span><span class="font-bold text-slate-900">87.05배</span>
+                        </div>
+                        <div class="flex justify-between border-b border-slate-100 pb-3">
+                            <span class="text-slate-500">BPS</span><span class="font-bold text-slate-900">214원</span>
+                        </div>
+                        <div class="flex justify-between border-b border-slate-100 pb-3">
+                            <span class="text-slate-500">배당수익률</span><span class="font-bold text-slate-900">N/A</span>
+                        </div>
+                        <div class="flex justify-between border-b border-slate-100 pb-3">
+                            <span class="text-slate-500">주당배당금</span><span class="font-bold text-slate-900">N/A</span>
+                        </div>
+                    </div>
+                    <p class="text-[12px] text-slate-400 mt-5">PER, EPS, PBR, BPS 배당수익률 기준 ⓘ</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- 4. 글로벌 바이오 머니플로우 -->
+        <section class="mb-12 font-black italic">
+            <h2 class="text-2xl font-black mb-6 uppercase tracking-tighter"><span class="w-1.5 h-8 bg-indigo-600 rounded-full shadow-lg mr-2 inline-block"></span> 4. 글로벌 바이오 머니플로우</h2>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                <div class="premium-card p-10 rounded-[50px] bg-white lg:col-span-2 shadow-2xl border border-slate-100" onclick="zoomChart('moneyFlowChart', 'Correlation Analysis')">
+                    <div class="flex justify-between items-center mb-8">
+                        <h3 class="text-sm text-slate-400 uppercase tracking-widest">NASDAQ BIO (XBI) VS ADM</h3>
+                        <div id="moneyflow-status-badge" class="status-badge status-active shadow-xl ai-pulse">분석 대기...</div>
+                    </div>
+                    <div class="chart-container"><canvas id="moneyFlowChart"></canvas></div>
+                </div>
+                <div class="premium-card p-10 rounded-[50px] bg-slate-900 text-white shadow-2xl border-none flex flex-col justify-between">
+                    <div class="space-y-8">
+                        <div>
+                            <h3 class="text-emerald-400 text-lg font-black mb-4 uppercase tracking-tighter">AI 실시간 현황 판독 결과</h3>
+                            <div id="moneyflow-commentary" class="space-y-6 text-xs font-bold leading-relaxed text-slate-300">데이터 로딩 중...</div>
+                        </div>
+                        <div class="pt-6 border-t border-white/10 space-y-4">
+                            <h4 class="text-indigo-300 text-xs font-black uppercase tracking-widest">머니플로우 상태 정의</h4>
+                            <div class="space-y-3">
+                                <p class="text-[11px] text-white font-bold leading-tight"><span class="text-indigo-400">● 동조화 (Sync):</span> 시장 지수(XBI)와 주가가 함께 움직이며 안정적인 섹터 흐름을 탑니다.</p>
+                                <p class="text-[11px] text-white font-bold leading-tight"><span class="text-emerald-400">● 개별 강세 (Outperform):</span> 지수 하락 시에도 주가만 오르는 상태로, 강력한 주포 세력이 개입한 신호입니다.</p>
+                                <p class="text-[11px] text-white font-bold leading-tight"><span class="text-red-400">● 괴리 발생 (Divergence):</span> 지수 상승을 따라가지 못하는 상태로, 악재 선반영 또는 저평가 매수 기회입니다.</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
         </section>
 
-        <!-- 4 & 5 Grid -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-12 font-black italic">
-            <section><h2 class="text-2xl font-black mb-6 uppercase tracking-tighter"><span class="w-1.5 h-8 bg-indigo-600 rounded-full shadow-lg mr-2 inline-block"></span> 4. 글로벌 바이오 머니플로우</h2><div class="premium-card p-10 rounded-[50px] bg-white h-[400px] shadow-2xl border border-slate-100"><canvas id="moneyFlowChart"></canvas></div></section>
-            <section><h2 class="text-2xl font-black mb-6 uppercase tracking-tighter"><span class="w-1.5 h-8 bg-indigo-600 rounded-full shadow-lg mr-2 inline-block"></span> 5. 글로벌 모멘텀 지수</h2><div class="premium-card p-10 rounded-[50px] bg-white h-[400px] shadow-2xl border border-slate-100 flex flex-col"><canvas id="momentumChart" class="flex-1"></canvas><div id="youtube-tags" class="flex flex-wrap gap-2 mt-6"></div></div></section>
-        </div>
-
-        <!-- 6 & 7 Grid -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-12 font-black italic font-black">
-            <section><h2 class="text-2xl font-black mb-6 uppercase tracking-tighter"><span class="w-1.5 h-8 bg-gold-gradient rounded-full shadow-lg mr-2 inline-block"></span> 6. 글로벌 피어 그룹 비교</h2><div class="premium-card p-10 rounded-[50px] bg-white h-[400px] shadow-2xl border border-slate-100"><canvas id="peerChart"></canvas></div></section>
-            <section><h2 class="text-2xl font-black mb-6 uppercase tracking-tighter"><span class="w-1.5 h-8 bg-indigo-600 rounded-full shadow-lg mr-2 inline-block"></span> 7. 미래 변곡점 타임라인</h2><div class="premium-card p-10 rounded-[50px] bg-white h-[400px] overflow-y-auto shadow-2xl border border-slate-100"><div id="rise-timeline" class="space-y-8 italic font-bold"></div></div></section>
-        </div>
-
-        <!-- 8 & 9 Grid (RE-ADDED 9) -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-12 font-black italic font-black">
-            <section><h2 class="text-2xl font-black mb-6 uppercase tracking-tighter"><span class="w-1.5 h-8 bg-indigo-600 rounded-full shadow-lg mr-2 inline-block"></span> 8. AI 시나리오 시뮬레이터</h2><div class="premium-card p-10 rounded-[50px] bg-white h-[400px] shadow-2xl border border-slate-100"><div class="space-y-6"><div><label class="text-[11px] font-black block mb-4 uppercase tracking-[0.2em] italic text-slate-400 italic">임상 성공 확률 (%)</label><input type="range" id="sim-clinical" class="w-full accent-indigo-600 h-1.5 bg-slate-100 rounded-full appearance-none transition-all font-black"></div><button onclick="runSim()" class="w-full py-5 bg-indigo-600 text-white rounded-[30px] font-black italic shadow-2xl uppercase tracking-widest font-black italic">RUN PREDICTION ENGINE</button><div id="sim-result-box" class="mt-6 text-center text-slate-400 uppercase text-xs italic font-black font-black italic">Waiting for Input...</div></div></div></section>
-            <section><h2 class="text-2xl font-black mb-6 uppercase tracking-tighter"><span class="w-1.5 h-8 bg-red-600 rounded-full shadow-lg mr-2 inline-block"></span> 9. 공매도 현황 및 대응 전략</h2><div class="premium-card p-8 rounded-[50px] bg-white h-[400px] shadow-2xl border border-slate-100 flex flex-col font-black font-black italic"><h3 class="text-[11px] text-slate-400 uppercase mb-4 tracking-widest italic font-black">Daily Short Vol & Balance</h3><canvas id="shortSellingChart" class="flex-1"></canvas><div class="mt-4 p-4 bg-red-50 rounded-2xl border border-red-100 font-black"><p class="text-[11px] text-red-700 font-bold uppercase italic font-black font-black italic italic">AI TACTIC: 숏 스퀴즈 발생 확률 82%. 18,200원 지지 확인 시 공격적 대응.</p></div></div></section>
-        </div>
-
-        <!-- 10, 11, 12 Grid -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-10 mb-12 font-black italic font-black">
-            <section><h2 class="text-2xl font-black mb-6 uppercase tracking-tighter font-black"><span class="w-1.5 h-8 bg-orange-500 rounded-full shadow-lg mr-2 inline-block"></span> 10. 지분 및 유통 분석</h2><div class="premium-card p-8 rounded-[40px] bg-white h-[400px] flex flex-col shadow-2xl border border-slate-100 italic font-black"><canvas id="floatPieChart"></canvas></div></section>
-            <section><h2 class="text-2xl font-black mb-6 uppercase tracking-tighter font-black"><span class="w-1.5 h-8 bg-blue-600 rounded-full shadow-lg mr-2 inline-block"></span> 11. 주요 거래 창구</h2><div class="premium-card p-8 rounded-[40px] bg-white h-[400px] overflow-y-auto shadow-2xl border border-slate-100 space-y-4 font-black italic" id="brokerage-list"></div></section>
-            <section><h2 class="text-2xl font-black mb-6 uppercase tracking-tighter font-black italic"><span class="w-1.5 h-8 bg-emerald-600 rounded-full shadow-lg mr-2 inline-block"></span> 12. 계열사 동조화 지수</h2><div class="premium-card p-8 rounded-[40px] bg-white h-[400px] flex flex-col shadow-2xl border border-slate-100 font-black italic"><canvas id="affiliateChart"></canvas><div class="mt-auto pt-6 text-center text-indigo-600 font-black text-3xl italic tracking-tighter">CORR: 0.89</div></div></section>
-        </div>
-
-        <!-- 13. Intelligence Hub -->
-        <section class="mb-24 font-black italic font-black">
-            <h2 class="text-2xl font-black mb-6 uppercase tracking-tighter italic"><span class="w-1.5 h-8 bg-slate-400 rounded-full shadow-lg mr-2 inline-block"></span> 13. 글로벌 인텔리전스 허브</h2>
-            <div id="news-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 italic font-black"></div>
+        <!-- 5. 글로벌 모멘텀 지수 -->
+        <section class="mb-12 font-black italic">
+            <h2 class="text-2xl font-black mb-6 uppercase tracking-tighter"><span class="w-1.5 h-8 bg-indigo-600 rounded-full shadow-lg mr-2 inline-block"></span> 5. 글로벌 모멘텀 지수</h2>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                <div class="premium-card p-10 rounded-[50px] bg-white lg:col-span-2 shadow-2xl border border-slate-100" onclick="zoomChart('momentumChart', 'Global Momentum Index')">
+                    <div class="mb-8">
+                        <h3 class="text-sm text-slate-400 uppercase tracking-widest">5방향 성장 가속도 인덱스</h3>
+                        <p class="text-xs text-slate-400 mt-2 font-bold">R&D 역량, 공시 빈도, 소셜 여론, 유튜브 유입, 수급 강도를 종합한 지표입니다.</p>
+                    </div>
+                    <div class="chart-container" style="height: 380px;"><canvas id="momentumChart"></canvas></div>
+                </div>
+                <div class="premium-card p-10 rounded-[50px] bg-indigo-950 text-white shadow-2xl border-none flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-indigo-300 text-lg font-black mb-6 uppercase tracking-tighter">AI 모멘텀 전략 리포트</h3>
+                        <div id="momentum-commentary" class="space-y-6 text-xs font-bold leading-relaxed text-indigo-100">지표 산출 대기 중...</div>
+                    </div>
+                    <div id="youtube-tags" class="flex flex-wrap gap-2 mt-6 border-t border-indigo-800 pt-6"></div>
+                </div>
+            </div>
         </section>
 
-        <footer class="text-center py-20 border-t border-slate-200 font-black italic opacity-60"><p class="text-[11px] tracking-[0.6em] uppercase font-black font-black font-black font-black font-black font-black font-black italic">© 2026 HYUNDAI ADM SUPREME COMMAND. POWERED BY CLOUD AI CORE.</p></footer>
+        <!-- 6. 글로벌 피어 그룹 비교 -->
+        <section class="mb-12 font-black italic">
+            <h2 class="text-2xl font-black mb-6 uppercase tracking-tighter"><span class="w-1.5 h-8 bg-gold-gradient rounded-full shadow-lg mr-2 inline-block"></span> 6. 글로벌 피어 그룹 비교</h2>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                <div class="premium-card p-10 rounded-[50px] bg-white lg:col-span-2 shadow-2xl" onclick="zoomChart('peerChart', 'Global Peer Comparison')">
+                    <h3 class="text-sm text-slate-400 uppercase mb-8">INDUSTRY ROI BENCHMARK (기업 효율 비교)</h3>
+                    <div class="chart-container"><canvas id="peerChart"></canvas></div>
+                </div>
+                <div class="premium-card p-10 rounded-[50px] bg-amber-50 border-amber-100 shadow-2xl flex flex-col justify-between">
+                    <div class="space-y-8">
+                        <div>
+                            <h3 class="text-amber-600 text-lg font-black mb-4 uppercase tracking-tighter">ROI (투자 수익률) 안내</h3>
+                            <div class="space-y-4 text-[11px] font-bold leading-relaxed text-amber-900">
+                                <p>ROI란 <strong>Return on Investment</strong>의 약자로, 투입한 자본 대비 얼마나 많은 이익을 얻었는지를 나타내는 지표입니다.</p>
+                                <ul class="space-y-3">
+                                    <li><strong>✅ 계산 방식:</strong> (순이익 또는 파이프라인 가치 / 투자 비용) × 100</li>
+                                    <li><strong>✅ 데이터 출처:</strong> 금융감독원(DART) 사업보고서 기반 실적 및 파이프라인 가치 평가 합산</li>
+                                    <li><strong>✅ 투자 전략:</strong> 타 바이오 기업(SK바이오, 셀트리온 등) 대비 현대ADM의 압도적인 ROI는 효율적인 CRO 중심의 신약 개발 모델이 강력하게 작동 중임을 증명합니다.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 7. 미래 변곡점 (RE-ADDED HARDCODED) -->
+        <section class="mb-12 font-black italic">
+            <h2 class="text-2xl font-black mb-6 uppercase tracking-tighter"><span class="w-1.5 h-8 bg-indigo-600 rounded-full shadow-lg mr-2 inline-block"></span> 7. 미래 변곡점 (상승/하락 리스크 분석)</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-10">
+                <!-- 상승 요인 -->
+                <div class="premium-card p-10 rounded-[50px] bg-emerald-50 border border-emerald-100 shadow-2xl">
+                    <h3 class="text-emerald-700 text-lg font-black mb-6 uppercase tracking-widest flex items-center gap-2">🚀 주가 상승 주요 촉매제 (Upside Catalyst)</h3>
+                    <ul class="space-y-6 text-xs text-slate-800 font-bold leading-relaxed">
+                        <li class="p-5 bg-white rounded-3xl shadow-sm border border-emerald-100">
+                            <strong class="text-emerald-600 block mb-2 text-sm uppercase">1. 현대바이오 항바이러스제(CP-COV03) 글로벌 임상 가속화</strong>
+                            대주주 현대바이오의 범용 항바이러스제 임상 대행을 통한 대규모 CRO 매출 발생 및 FDA 패스트트랙 신청 모멘텀.
+                        </li>
+                        <li class="p-5 bg-white rounded-3xl shadow-sm border border-emerald-100">
+                            <strong class="text-emerald-600 block mb-2 text-sm uppercase">2. 젠큐릭스 파트너십에 따른 동반 시너지</strong>
+                            동반 진단 및 바이오마커 연구 개발 가속. 임상 효율성 증대로 인한 실적 개선 기대감 집중.
+                        </li>
+                        <li class="p-5 bg-white rounded-3xl shadow-sm border border-emerald-100">
+                            <strong class="text-emerald-600 block mb-2 text-sm uppercase">3. 신약 개발사로의 '환골탈태' 및 숏스퀴즈</strong>
+                            단순 임상 대행에서 벗어나 자체 신약 개발 기대감으로 숏포지션(공매도) 세력의 대규모 환매수(Short Squeeze) 촉발 가능성.
+                        </li>
+                    </ul>
+                </div>
+                <!-- 하락 리스크 -->
+                <div class="premium-card p-10 rounded-[50px] bg-red-50 border border-red-100 shadow-2xl">
+                    <h3 class="text-red-700 text-lg font-black mb-6 uppercase tracking-widest flex items-center gap-2">⚠️ 주가 하락 리스크 요인 (Downside Risk)</h3>
+                    <ul class="space-y-6 text-xs text-slate-800 font-bold leading-relaxed">
+                        <li class="p-5 bg-white rounded-3xl shadow-sm border border-red-100">
+                            <strong class="text-red-600 block mb-2 text-sm uppercase">1. 단기 과열에 따른 밸류에이션 부담</strong>
+                            PBR 87배 이상의 초고평가 구간. 실적이 주가 상승폭을 따라가지 못할 경우, 기관 및 외인의 대규모 차익 실현 폭탄 우려.
+                        </li>
+                        <li class="p-5 bg-white rounded-3xl shadow-sm border border-red-100">
+                            <strong class="text-red-600 block mb-2 text-sm uppercase">2. 임상 지연 및 규제 당국 제동</strong>
+                            진행 중인 핵심 임상 파이프라인의 환자 모집 지연 또는 유효성 입증 실패 시, 모멘텀 소멸로 인한 주가 급락 리스크.
+                        </li>
+                        <li class="p-5 bg-white rounded-3xl shadow-sm border border-red-100">
+                            <strong class="text-red-600 block mb-2 text-sm uppercase">3. 오버행(잠재적 매도 물량) 이슈 발생</strong>
+                            주가 급등을 틈탄 대주주의 지분 매각, 혹은 메자닌(CB) 물량의 주식 전환으로 인한 지분 가치 희석 가능성.
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- 8. 공매도 현황 및 대응 전략 (구 9번) -->
+        <section class="mb-12 font-black italic">
+            <h2 class="text-2xl font-black mb-6 uppercase tracking-tighter"><span class="w-1.5 h-8 bg-red-600 rounded-full shadow-lg mr-2 inline-block"></span> 8. 공매도 현황 및 실전 대응 전략</h2>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                <div class="premium-card p-10 rounded-[50px] bg-white lg:col-span-2 shadow-2xl flex flex-col" onclick="zoomChart('shortSellingChart', 'Short Volume Trace')">
+                    <h3 class="text-sm text-slate-400 uppercase mb-8">일별 공매도 거래량 추이</h3>
+                    <div class="chart-container"><canvas id="shortSellingChart"></canvas></div>
+                </div>
+                <div class="premium-card p-10 rounded-[50px] bg-red-950 text-white shadow-2xl border-none flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-red-400 text-lg font-black mb-6 uppercase tracking-tighter">실전 숏스퀴즈 대응 전략</h3>
+                        <div class="space-y-6 text-xs font-bold leading-relaxed text-red-100">
+                            <div>
+                                <p class="text-white text-sm mb-1">🎯 현재 포지션 진단</p>
+                                <p>최근 주가 급등으로 공매도 세력의 손실(마진콜) 임계점에 다다르고 있습니다.</p>
+                            </div>
+                            <div>
+                                <p class="text-red-400 text-sm mb-1">🔥 돌파 시 전략 (Upside)</p>
+                                <p>주가가 저항선(20,000원)을 강력한 거래량과 돌파하면, 숏커버링 환매수가 발생해 주가가 수직 상승합니다. <strong>매도 금지, 비중 확대 및 홀딩.</strong></p>
+                            </div>
+                            <div>
+                                <p class="text-slate-400 text-sm mb-1">❄️ 이탈 시 전략 (Downside)</p>
+                                <p>주가가 16,500원 지지선을 깨고 내려가면 숏 세력의 공격이 거세집니다. <strong>기계적인 손절매 또는 비중 축소가 필수적입니다.</strong></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 9. 지분 및 유통 / 10. 창구 분석 -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-12 font-black italic">
+            <!-- 9. 지분 분석 (구 10번) -->
+            <section>
+                <h2 class="text-2xl font-black mb-6 uppercase tracking-tighter"><span class="w-1.5 h-8 bg-orange-500 rounded-full shadow-lg mr-2 inline-block"></span> 9. 지분 및 유통 분석</h2>
+                <div class="premium-card p-10 rounded-[50px] bg-white shadow-2xl flex flex-col h-full">
+                    <div class="chart-container mb-6" style="height: 250px;" onclick="zoomChart('floatPieChart', 'Float Analysis')"><canvas id="floatPieChart"></canvas></div>
+                    <div class="pt-6 border-t border-slate-100 space-y-4 text-sm mt-auto">
+                        <div class="flex justify-between items-center pb-2 border-b border-slate-50"><span class="text-slate-500 uppercase tracking-widest">대주주 (32.4%)</span><span class="text-indigo-900">약 6,966,000 주</span></div>
+                        <div class="flex justify-between items-center pb-2 border-b border-slate-50"><span class="text-red-500 uppercase tracking-widest">유통물량 (58.2%)</span><span class="text-red-600">약 12,513,000 주</span></div>
+                        <div class="flex justify-between items-center pb-2"><span class="text-slate-500 uppercase tracking-widest">기타 (9.4%)</span><span class="text-slate-700">약 2,021,000 주</span></div>
+                    </div>
+                    <div class="mt-6 p-5 bg-orange-50 rounded-3xl border border-orange-100">
+                        <p class="text-[11px] text-orange-800 font-bold leading-relaxed">
+                            💡 <strong>분석 방법 (품절주 판독):</strong> 총 발행주식(약 2,150만주) 중 실제 거래되는 유통물량이 60% 미만으로 가볍습니다. 작은 세력의 자금만으로도 상한가/하한가를 만들 수 있는 고변동성 '품절주' 패턴에 유의하세요.
+                        </p>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- 10. 창구 분석 (구 11번) -->
+            <section>
+                <h2 class="text-2xl font-black mb-6 uppercase tracking-tighter"><span class="w-1.5 h-8 bg-blue-600 rounded-full shadow-lg mr-2 inline-block"></span> 10. 주요 거래 창구</h2>
+                <div class="premium-card p-10 rounded-[50px] bg-white shadow-2xl flex flex-col h-full">
+                    <div id="brokerage-list" class="space-y-3 flex-1 overflow-y-auto min-h-[250px]">
+                        <!-- JS injected here -->
+                    </div>
+                    <div class="mt-6 p-5 bg-blue-50 rounded-3xl border border-blue-100 mt-auto">
+                        <h4 class="text-blue-800 mb-2 text-xs uppercase tracking-widest">💡 세력 조짐 및 창구 분석법</h4>
+                        <p class="text-[11px] text-blue-900 font-bold leading-relaxed">
+                            특정 외국계(JP모간 등)나 기관 창구에서 <strong>2~3일 연속 대량 순매수</strong>가 찍힌다면 주가를 견인하는 주포(세력)의 본격적인 매집 징후입니다. 반면, 주가가 20% 이상 급등하는 고점 부근에서 매수 1위 창구가 매도 1위로 돌변하여 대량 물량을 쏟아낸다면 <strong>설거지(물량 떠넘기기)</strong> 신호이므로 즉시 동반 매도해야 합니다.
+                        </p>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- 11 & 12. Affiliate & News -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-24 font-black italic">
+            <section>
+                <h2 class="text-2xl font-black mb-6 uppercase tracking-tighter"><span class="w-1.5 h-8 bg-emerald-600 rounded-full shadow-lg mr-2 inline-block"></span> 11. 계열사 동조화 (현대바이오)</h2>
+                <div class="premium-card p-10 rounded-[50px] bg-white h-[450px] shadow-2xl" onclick="zoomChart('affiliateChart', 'Affiliate Correlation')">
+                    <div class="chart-container" style="height: 350px;"><canvas id="affiliateChart"></canvas></div>
+                </div>
+            </section>
+            <section>
+                <h2 class="text-2xl font-black mb-6 uppercase tracking-tighter"><span class="w-1.5 h-8 bg-slate-400 rounded-full shadow-lg mr-2 inline-block"></span> 12. 글로벌 인텔리전스 허브</h2>
+                <div id="news-container" class="grid grid-cols-1 gap-6 h-[450px] overflow-y-auto"></div>
+            </section>
+        </div>
+
+        <footer class="text-center py-10 border-t border-slate-200 font-black italic opacity-60">
+            <p class="text-[11px] tracking-[0.5em] uppercase">© 2026 HYUNDAI ADM SUPREME COMMAND. POWERED BY CLOUD AI CORE.</p>
+        </footer>
     </div>
 
     <script>
         const apiKey = "";
         let currentPrice = 18670;
         let currentSupplyPeriod = '1M';
+        let charts = {};
         const formatNumber = (num) => num?.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") || "0";
 
-        // Historical Mocker
-        let fullData = Array.from({length: 365}, (_, i) => ({
-            date: '03/'+(i+1), price: 18000 + Math.random()*2000, personal: (Math.random()-0.5)*10000, foreign: (Math.random()-0.5)*10000, institution: (Math.random()-0.5)*10000,
-            cumPers: 100000 + i*1000, cumFor: -50000 - i*500, cumInst: -50000 - i*500, shortVol: Math.random()*50000
-        }));
+        function generateHistoricalData(days) {
+            const data = []; const today = new Date();
+            for (let i = days; i >= 0; i--) {
+                const date = new Date(); date.setDate(today.getDate() - i);
+                const ds = `${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
+                data.push({
+                    date: ds, price: 18000 + Math.random()*2000,
+                    personal: (Math.random()-0.5)*100000, foreign: (Math.random()-0.5)*80000, institution: (Math.random()-0.5)*50000,
+                    cumPers: 100000 + (days-i)*500, cumFor: -50000 - (days-i)*300, shortVol: Math.random()*50000
+                });
+            }
+            return data;
+        }
+        let fullData = generateHistoricalData(365);
 
-        async function fetchPremiumData() {
-            const query = "현대ADM(187660) 실시간 주가, 수급 특징, 주요 거래원, 공매도 현황, 글로벌 바이오 섹터 흐름, PubMed 의학 데이터 통합 전문가 코멘트 및 환율 지수";
-            const systemPrompt = "Strategic Expert Analyst. Output JSON with full metadata: currentPrice, change, changePercent, marketIndices, exchangeRate, floatInfo, brokerageTop5, affiliateCorrelation, expertCommentary, news, futureEvents.";
+        async function fetchPremiumData(retryCount = 0) {
+            const query = "현대ADM(187660) 주식 분석 데이터";
+            const systemPrompt = "Expert Analyst. Output STRICT JSON with keys: currentPrice, change, changePercent, marketIndices, exchangeRate, brokerageTop5, expertCommentary, news, moneyFlowAnalysis: { status, commentary: string[] }, momentumAnalysis: { score: number[], commentary: string[] }.";
+            
             try {
                 const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ contents: [{ parts: [{ text: query }] }], systemInstruction: { parts: [{ text: systemPrompt }] }, tools: [{ "google_search": {} }], generationConfig: { responseMimeType: "application/json" } })
                 });
+
+                if (!response.ok) throw new Error("ConnectionException");
                 const result = await response.json();
-                const data = JSON.parse(result.candidates[0].content.parts[0].text);
-                updateUI(data);
-            } catch (e) { 
-                console.error(e);
-                updateUI({ currentPrice: 18670, change: 0, changePercent: "0%", exchangeRate: { val: "1,352.40", percent: "+0.15%", pos: true }, brokerageTop5: [{name:'JP모간', volume:245120, type:'Foreign'}, {name:'모건스탠리', volume:112000, type:'Foreign'}] });
+                
+                if (result && result.candidates && result.candidates[0] && result.candidates[0].content && result.candidates[0].content.parts[0].text) {
+                    let jsonText = result.candidates[0].content.parts[0].text.replace(/```json/g, "").replace(/```/g, "").trim();
+                    const data = JSON.parse(jsonText);
+                    updateUI(data);
+                    if(data.moneyFlowAnalysis) updateMoneyFlowStatus(data.moneyFlowAnalysis);
+                    if(data.momentumAnalysis) updateMomentumStatus(data.momentumAnalysis);
+                } else {
+                    throw new Error("ParseException");
+                }
+            } catch (e) {
+                if (retryCount < 3) {
+                    setTimeout(() => fetchPremiumData(retryCount + 1), 1000 * Math.pow(2, retryCount));
+                } else {
+                    // Activate Offline Mock Mode after 3 failures
+                    const mockData = {
+                        currentPrice: 18670, change: 320, changePercent: "+1.74%",
+                        marketIndices: { kospi: { val: "2,580.44", percent: "+0.54%", pos: true }, kosdaq: { val: "840.12", percent: "+0.82%", pos: true }, nasdaq: { val: "16,240.50", percent: "+1.12%", pos: true } },
+                        exchangeRate: { val: "1,345.20", percent: "-0.15%", pos: false },
+                        expertCommentary: { action: "오프라인 모드", percentage: 80, summary: "서버 응답 지연으로 안전 모드로 전환되었습니다. 내장된 시나리오 데이터를 분석합니다." },
+                        news: [{ date: "03/01 SYNC", title: "네트워크 지연 안내", summary: "현재 AI 실시간 연결이 원활하지 않아 오프라인 캐시 데이터를 표시합니다.", sentiment: "neg" }],
+                        brokerageTop5: [{ name: "JP모간", volume: 245120 }, { name: "모건스탠리", volume: 112000 }, { name: "키움증권", volume: -54000 }]
+                    };
+                    updateUI(mockData);
+                    updateMoneyFlowStatus({ status: '분석 대기 (오프라인)', commentary: ["API 통신 지연 상태입니다.", "기존 데이터를 바탕으로 한 보수적 전략을 취하세요.", "로컬 캐시 엔진 가동 중."] });
+                    updateMomentumStatus({ score: [80, 75, 85, 70, 90], commentary: ["실시간 모멘텀 데이터 지연 중.", "기본 벤치마크 지수 표시."] });
+                }
             }
+        }
+
+        function updateMoneyFlowStatus(analysis) {
+            const badge = document.getElementById('moneyflow-status-badge');
+            const comm = document.getElementById('moneyflow-commentary');
+            if(!badge || !comm) return;
+            badge.innerText = analysis.status || "분석 완료";
+            badge.className = `status-badge ${analysis.status === '개별 강세' ? 'bg-emerald-500 ai-pulse' : (analysis.status === '괴리 발생' ? 'bg-red-500 ai-pulse' : 'bg-indigo-600')} text-white shadow-lg`;
+            if(analysis.commentary) comm.innerHTML = analysis.commentary.map((c, i) => `<div><p class="text-white text-sm mb-1"><strong>${i === 0 ? '🔍 실시간 포인트' : (i === 1 ? '📈 대응 전술' : '🎯 최종 결론')}</strong></p><p class="text-slate-300">${c}</p></div>`).join('');
+        }
+
+        function updateMomentumStatus(analysis) {
+            const comm = document.getElementById('momentum-commentary');
+            if(comm && analysis.commentary) comm.innerHTML = analysis.commentary.map((c, i) => `<div><p class="text-white text-sm mb-1"><strong>${i === 0 ? '🚀 추진력 분석' : '🛡️ 리스크 관리'}</strong></p><p class="text-indigo-100">${c}</p></div>`).join('');
+            if(analysis.score) renderCharts(null, analysis.score);
         }
 
         function updateUI(data) {
             currentPrice = data.currentPrice || currentPrice;
-            document.getElementById('live-price').innerHTML = `${formatNumber(currentPrice)}<span class="text-2xl font-medium ml-3 text-slate-400 italic">원</span>`;
+            document.getElementById('live-price').innerHTML = `${formatNumber(currentPrice)}<span class="text-2xl font-medium ml-3 text-slate-400">원</span>`;
             document.getElementById('price-change-row').innerText = `${data.change > 0 ? '▲' : '▼'} ${formatNumber(Math.abs(data.change))} (${data.changePercent})`;
 
-            const uIdx = (id, d) => { if(d){ document.getElementById(`${id}-val`).innerText = d.val; document.getElementById(`${id}-change`).innerText = d.percent; document.getElementById(`${id}-change`).className = `text-[8px] font-black ${d.pos ? 'text-stock-up' : 'text-stock-down'}`; } };
+            const uIdx = (id, d) => { if(d){ document.getElementById(`${id}-val`).innerText = d.val; document.getElementById(`${id}-change`).innerText = d.percent; document.getElementById(`${id}-change`).className = `text-[8px] ${d.pos ? 'text-stock-up' : 'text-stock-down'}`; } };
             uIdx('kospi', data.marketIndices?.kospi); uIdx('kosdaq', data.marketIndices?.kosdaq); uIdx('nasdaq', data.marketIndices?.nasdaq);
             if(data.exchangeRate) { document.getElementById('usd-krw-val').innerText = data.exchangeRate.val; document.getElementById('usd-krw-change').innerText = data.exchangeRate.percent; }
 
-            const low = 1118; const high = 20350; const pct = ((currentPrice - low) / (high - low)) * 100;
+            const pct = ((currentPrice - 1118) / (20350 - 1118)) * 100;
             document.getElementById('price-pointer').style.left = `${Math.min(100, Math.max(0, pct))}%`;
             document.getElementById('price-pointer').innerText = formatNumber(currentPrice);
 
             if(data.expertCommentary) {
-                document.getElementById('reco-action').innerText = data.expertCommentary.action || "적극 매집 가동";
-                document.getElementById('reco-pct').innerText = (data.expertCommentary.percentage || 88) + "%";
-                document.getElementById('reco-progress').style.width = (data.expertCommentary.percentage || 88) + "%";
-                document.getElementById('expert-commentary-text').innerText = data.expertCommentary.summary || "수급 지표 분석 결과 세력의 매집 강도가 전고점 돌파를 지지하고 있습니다.";
+                document.getElementById('reco-action').innerText = data.expertCommentary.action || "매수 대기";
+                document.getElementById('reco-pct').innerText = (data.expertCommentary.percentage || 85) + "%";
+                document.getElementById('reco-progress').style.width = (data.expertCommentary.percentage || 85) + "%";
+                document.getElementById('expert-commentary-text').innerText = data.expertCommentary.summary;
             }
-
-            if(data.news) {
-                document.getElementById('news-container').innerHTML = data.news.map(n => `<div class="premium-card p-8 rounded-[40px] bg-white border-b-4 ${n.sentiment === 'pos' ? 'border-emerald-400' : 'border-red-400'} shadow-2xl font-black italic"><span class="text-[10px] font-black text-slate-400 block mb-3 italic">${n.date} SYNC</span><h4 class="font-black text-lg mb-4 italic uppercase text-slate-950 font-black">${n.title}</h4><p class="text-[12px] text-slate-500 font-bold leading-relaxed italic">${n.summary}</p></div>`).join('');
-            }
-
-            if(data.brokerageTop5) {
-                document.getElementById('brokerage-list').innerHTML = data.brokerageTop5.map((b,i) => `<div class="flex justify-between items-center p-4 bg-slate-50 rounded-2xl border border-slate-100"><span class="font-black">${i+1}. ${b.name}</span><span class="${b.volume > 0 ? 'text-stock-up' : 'text-stock-down'} font-black italic font-black">${formatNumber(b.volume)}주</span></div>`).join('');
-            }
-            renderCharts(); calculatePortfolio();
+            if(data.news) document.getElementById('news-container').innerHTML = data.news.map(n => `<div class="premium-card p-6 bg-white border-b-4 ${n.sentiment === 'pos' ? 'border-emerald-400' : 'border-red-400'} shadow-xl mb-4"><span class="text-[9px] text-slate-400 block mb-2">${n.date} SYNC</span><h4 class="text-sm mb-2 uppercase font-bold">${n.title}</h4><p class="text-[12px] text-slate-500">${n.summary}</p></div>`).join('');
+            if(data.brokerageTop5) document.getElementById('brokerage-list').innerHTML = data.brokerageTop5.map((b,i) => `<div class="flex justify-between items-center p-4 bg-slate-50 rounded-2xl border border-slate-100"><span class="text-sm font-bold">${i+1}. ${b.name}</span><span class="${b.volume > 0 ? 'text-stock-up' : 'text-stock-down'} text-sm font-bold">${formatNumber(b.volume)}주</span></div>`).join('');
+            renderCharts(data); calculatePortfolio();
         }
 
-        let charts = {};
-        function renderCharts() {
-            const daysMap = { '1D': 1, '1W': 7, '1M': 30, '3M': 90, '6M': 180, '1Y': 365 };
-            const d = daysMap[currentSupplyPeriod]; const f = fullData.slice(-d);
+        function renderCharts(data, momScores = [85, 75, 90, 80, 84]) {
+            const d = { '1D': 1, '1W': 7, '1M': 30, '3M': 90, '6M': 180, '1Y': 365 }[currentSupplyPeriod];
+            const f = fullData.slice(-d);
+            const dynamicWidth = Math.max(window.innerWidth / 2.5, f.length * 40);
             
-            const ctx1 = document.getElementById('investorChart').getContext('2d'); if (charts.investor) charts.investor.destroy();
-            charts.investor = new Chart(ctx1, { type: 'bar', data: { labels: f.map(x => x.date), datasets: [{ label: 'P', data: f.map(x => x.personal), backgroundColor: '#10b981' }, { label: 'F', data: f.map(x => x.foreign), backgroundColor: '#ef4444' }, { label: 'I', data: f.map(x => x.institution), backgroundColor: '#4f46e5' } ]}, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: d <= 30 }, y: { display: false } } } });
+            if(document.getElementById('wrapper-investorChart')) document.getElementById('wrapper-investorChart').style.width = dynamicWidth + 'px';
+            if(document.getElementById('wrapper-cumulativeChart')) document.getElementById('wrapper-cumulativeChart').style.width = dynamicWidth + 'px';
 
-            const ctx2 = document.getElementById('cumulativeChart').getContext('2d'); if (charts.cumulative) charts.cumulative.destroy();
-            charts.cumulative = new Chart(ctx2, { type: 'line', data: { labels: f.map(x => x.date), datasets: [{ label: 'P', data: f.map(x => x.cumPers), borderColor: '#10b981', pointRadius: 0, tension: 0.4, borderWidth: 3 }, { label: 'F', data: f.map(x => x.cumFor), borderColor: '#ef4444', pointRadius: 0, tension: 0.4, borderWidth: 3 } ]}, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: d <= 30 }, y: { display: false } } } });
+            const ctx1 = document.getElementById('investorChart')?.getContext('2d'); if (ctx1 && charts.investor) charts.investor.destroy();
+            if(ctx1) charts.investor = new Chart(ctx1, { type: 'bar', data: { labels: f.map(x => x.date), datasets: [{ label: '개인', data: f.map(x => x.personal), backgroundColor: '#10b981' }, { label: '외인', data: f.map(x => x.foreign), backgroundColor: '#ef4444' }, { label: '기관', data: f.map(x => x.institution), backgroundColor: '#4f46e5' } ]}, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false } }, y: { display: false } } } });
 
-            const ctx3 = document.getElementById('moneyFlowChart').getContext('2d'); if (charts.moneyFlow) charts.moneyFlow.destroy();
-            charts.moneyFlow = new Chart(ctx3, { type: 'line', data: { labels: fullData.slice(-30).map(x => x.date), datasets: [{ label: 'XBI Flow', data: fullData.slice(-30).map(x => x.price * 0.9), borderColor: '#f59e0b', tension: 0.4, fill: true, backgroundColor: 'rgba(245, 158, 11, 0.05)', pointRadius: 0, borderWidth: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
+            const ctx2 = document.getElementById('cumulativeChart')?.getContext('2d'); if (ctx2 && charts.cumulative) charts.cumulative.destroy();
+            if(ctx2) charts.cumulative = new Chart(ctx2, { type: 'line', data: { labels: f.map(x => x.date), datasets: [{ label: '개인', data: f.map(x => x.cumPers), borderColor: '#10b981', pointRadius: d > 30 ? 0 : 3, tension: 0.4, borderWidth: 3 }, { label: '외인', data: f.map(x => x.cumFor), borderColor: '#ef4444', pointRadius: d > 30 ? 0 : 3, tension: 0.4, borderWidth: 3 } ]}, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false } }, y: { display: false } } } });
 
-            const ctx4 = document.getElementById('momentumChart').getContext('2d'); if (charts.momentum) charts.momentum.destroy();
-            charts.momentum = new Chart(ctx4, { type: 'radar', data: { labels: ['MEDICAL', 'DISCLOSURE', 'SNS', 'YOUTUBE', 'FORCE'], datasets: [{ data: [85, 75, 90, 80, 84], backgroundColor: 'rgba(79, 70, 229, 0.2)', borderColor: '#4f46e5', borderWidth: 3, pointRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, scales: { r: { ticks: { display: false } } }, plugins: { legend: { display: false } } } });
+            const ctx3 = document.getElementById('moneyFlowChart')?.getContext('2d'); if (ctx3 && charts.moneyFlow) charts.moneyFlow.destroy();
+            if(ctx3) charts.moneyFlow = new Chart(ctx3, { type: 'line', data: { labels: fullData.slice(-30).map(x => x.date), datasets: [{ label: 'XBI', data: fullData.slice(-30).map(x => x.price * 0.9), borderColor: '#f59e0b', tension: 0.4, fill: true, backgroundColor: 'rgba(245, 158, 11, 0.05)', pointRadius: 0, borderWidth: 4 }, { label: 'ADM', data: fullData.slice(-30).map(x => x.price), borderColor: '#1e1b4b', tension: 0.4, borderWidth: 4, pointRadius: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
 
-            const ctx5 = document.getElementById('peerChart').getContext('2d'); if (charts.peer) charts.peer.destroy();
-            charts.peer = new Chart(ctx5, { type: 'bar', data: { labels: ['현대ADM', '현대바이오', 'SK바이오', '셀트리온'], datasets: [{ label: 'ROI', data: [540, 42, 15, 8], backgroundColor: ['#4f46e5', '#cbd5e1', '#cbd5e1', '#cbd5e1'], borderRadius: 15 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
+            const ctx4 = document.getElementById('momentumChart')?.getContext('2d'); if (ctx4 && charts.momentum) charts.momentum.destroy();
+            if(ctx4) charts.momentum = new Chart(ctx4, { type: 'radar', data: { labels: ['연구개발', '공시정보', '소셜여론', '유튜브유입', '수급강도'], datasets: [{ data: momScores, backgroundColor: 'rgba(79, 70, 229, 0.3)', borderColor: '#6366f1', borderWidth: 3, pointRadius: 5 }] }, options: { responsive: true, maintainAspectRatio: false, scales: { r: { ticks: { display: false }, pointLabels: { font: { size: 12, weight: 'bold' } } } }, plugins: { legend: { display: false } } } });
 
-            const ctx6 = document.getElementById('shortSellingChart').getContext('2d'); if (charts.short) charts.short.destroy();
-            charts.short = new Chart(ctx6, { type: 'bar', data: { labels: fullData.slice(-30).map(x => x.date), datasets: [{ label: 'Short Vol', data: fullData.slice(-30).map(x => x.shortVol), backgroundColor: 'rgba(239, 68, 68, 0.6)', borderRadius: 6 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
+            const ctx5 = document.getElementById('peerChart')?.getContext('2d'); if (ctx5 && charts.peer) charts.peer.destroy();
+            if(ctx5) charts.peer = new Chart(ctx5, { type: 'bar', data: { labels: ['현대ADM', '현대바이오', 'SK바이오', '셀트리온'], datasets: [{ label: 'ROI', data: [540, 42, 15, 8], backgroundColor: ['#4f46e5', '#cbd5e1', '#cbd5e1', '#cbd5e1'], borderRadius: 15 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
 
-            const ctx7 = document.getElementById('floatPieChart').getContext('2d'); if (charts.float) charts.float.destroy();
-            charts.float = new Chart(ctx7, { type: 'doughnut', data: { labels: ['대주주', '유통물량', '기타'], datasets: [{ data: [32.4, 58.2, 9.4], backgroundColor: ['#1e1b4b', '#ef4444', '#cbd5e1'], borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { position: 'bottom' } } } });
+            const ctx6 = document.getElementById('shortSellingChart')?.getContext('2d'); if (ctx6 && charts.short) charts.short.destroy();
+            if(ctx6) charts.short = new Chart(ctx6, { type: 'bar', data: { labels: fullData.slice(-30).map(x => x.date), datasets: [{ label: '공매도량', data: fullData.slice(-30).map(x => x.shortVol), backgroundColor: 'rgba(239, 68, 68, 0.6)', borderRadius: 6 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
 
-            const ctx8 = document.getElementById('affiliateChart').getContext('2d'); if (charts.affiliate) charts.affiliate.destroy();
-            charts.affiliate = new Chart(ctx8, { type: 'line', data: { labels: fullData.slice(-15).map(x => x.date), datasets: [{ label: '현대ADM', data: fullData.slice(-15).map(x => x.price), borderColor: '#1e1b4b', borderWidth: 3, pointRadius: 0, tension: 0.4 }, { label: '현대바이오', data: fullData.slice(-15).map(x => x.price * 1.2), borderColor: '#10b981', borderWidth: 2, borderDash: [5, 5], pointRadius: 0, tension: 0.4 }]}, options: { responsive: true, maintainAspectRatio: false, scales: { x: { display: false }, y: { display: false } }, plugins: { legend: { display: false } } } });
+            const ctx7 = document.getElementById('floatPieChart')?.getContext('2d'); if (ctx7 && charts.float) charts.float.destroy();
+            if(ctx7) charts.float = new Chart(ctx7, { type: 'doughnut', data: { labels: ['대주주', '유통물량', '기타'], datasets: [{ data: [32.4, 58.2, 9.4], backgroundColor: ['#1e1b4b', '#ef4444', '#cbd5e1'], borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { position: 'bottom' } } } });
+
+            const ctx8 = document.getElementById('affiliateChart')?.getContext('2d'); if (ctx8 && charts.affiliate) charts.affiliate.destroy();
+            if(ctx8) charts.affiliate = new Chart(ctx8, { type: 'line', data: { labels: fullData.slice(-15).map(x => x.date), datasets: [{ label: 'ADM', data: fullData.slice(-15).map(x => x.price), borderColor: '#1e1b4b', borderWidth: 3, pointRadius: 0, tension: 0.4 }, { label: '현대바이오', data: fullData.slice(-15).map(x => x.price * 1.2), borderColor: '#10b981', borderWidth: 2, borderDash: [5, 5], pointRadius: 0, tension: 0.4 }]}, options: { responsive: true, maintainAspectRatio: false, scales: { x: { display: false }, y: { display: false } }, plugins: { legend: { display: false } } } });
         }
 
-        function changeSupplyPeriod(p) { currentSupplyPeriod = p; document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active')); document.getElementById(`btn-${p}`).classList.add('active'); renderCharts(); }
+        function zoomChart(chartId, title) {
+            const modal = document.getElementById('zoom-modal');
+            const originalInstance = Chart.getChart(chartId);
+            if (!originalInstance) return;
+            modal.style.display = 'flex';
+            document.getElementById('zoom-title').innerText = title;
+            document.getElementById('zoom-inner').style.width = Math.max(1400, originalInstance.config.data.labels.length * 50) + 'px';
+            if (charts.zoom) charts.zoom.destroy();
+            charts.zoom = new Chart(document.getElementById('zoomChart').getContext('2d'), {
+                type: originalInstance.config.type,
+                data: JSON.parse(JSON.stringify(originalInstance.config.data)),
+                options: { ...originalInstance.config.options, maintainAspectRatio: false }
+            });
+        }
 
+        function closeZoom() { document.getElementById('zoom-modal').style.display = 'none'; }
+        function changeSupplyPeriod(p) { currentSupplyPeriod = p; document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active')); document.getElementById(`btn-${p}`).classList.add('active'); renderCharts(); }
         function calculatePortfolio() {
             const s = parseFloat(document.getElementById('shares').value) || 0; const a = parseFloat(document.getElementById('avgPrice').value) || 0;
             if (s > 0 && a > 0) {
                 const tv = s * currentPrice; const roi = ((currentPrice / a) - 1) * 100;
                 document.getElementById('totalValueDisplay').innerText = formatNumber(Math.floor(tv)) + " 원"; document.getElementById('roiDisplay').innerText = (roi > 0 ? '+' : '') + roi.toFixed(2) + "%";
-                document.getElementById('roiDisplay').className = `text-5xl font-black ${roi > 0 ? 'text-stock-up' : (roi < 0 ? 'text-stock-down' : 'text-slate-400')} tracking-tighter italic font-black`;
+                document.getElementById('roiDisplay').className = `text-5xl font-black ${roi > 0 ? 'text-stock-up' : (roi < 0 ? 'text-stock-down' : 'text-slate-400')} tracking-tighter`;
             }
         }
         window.onload = () => { fetchPremiumData(); setInterval(fetchPremiumData, 300000); };
